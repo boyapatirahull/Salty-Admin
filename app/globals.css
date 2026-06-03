@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Salty admin palette mapped to shadcn tokens */
+    --background:         43 29% 96%;   /* #F9F7F2 cream */
+    --foreground:         27 13%  9%;   /* #1A1714 text */
+
+    --card:                0  0% 100%;  /* #FFFFFF warm-white */
+    --card-foreground:    27 13%  9%;
+
+    --popover:             0  0% 100%;
+    --popover-foreground: 27 13%  9%;
+
+    --primary:            21 80% 51%;   /* #E8581A ember */
+    --primary-foreground:  0  0% 100%;
+
+    --secondary:          37 19% 87%;   /* #EAE6DE stone */
+    --secondary-foreground: 27 13%  9%;
+
+    --muted:              37 19% 87%;   /* stone */
+    --muted-foreground:   30  5% 59%;   /* #9B9590 */
+
+    --accent:             43 29% 96%;   /* cream */
+    --accent-foreground:  27 13%  9%;
+
+    --destructive:         0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border:             37 16% 88%;   /* #E5E0D8 */
+    --input:              37 16% 88%;
+    --ring:               21 80% 51%;   /* ember */
+
+    --radius: 0.875rem;                 /* 14px cards */
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-cream text-salty-text antialiased;
+    font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #E5E0D8; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9B9590; }
