@@ -2,6 +2,7 @@
 
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
+import bcrypt from 'bcryptjs'
 import { createAuthClient, createServiceClient } from '@/lib/supabase/server'
 
 export async function loginAction(_: unknown, formData: FormData) {
@@ -12,27 +13,44 @@ export async function loginAction(_: unknown, formData: FormData) {
     return { error: 'Email and password are required.' }
   }
 
-  const auth = await createAuthClient()
-
-  const { error: signInError } = await auth.auth.signInWithPassword({ email, password })
-  if (signInError) {
-    return { error: 'Invalid email or password.' }
-  }
-
-  // Verify the user exists in admin_users and is active
   const service = createServiceClient()
+
   const { data: adminUser } = await service
     .from('admin_users')
-    .select('id, is_active')
+    .select('id, is_active, admin_password_hash')
     .eq('email', email)
     .single()
 
   if (!adminUser || !adminUser.is_active) {
-    await auth.auth.signOut()
-    return { error: 'You are not authorized to access this panel.' }
+    return { error: 'Invalid email or password.' }
   }
 
-  // Record login time and capture request metadata
+  const auth = await createAuthClient()
+
+  if (adminUser.admin_password_hash) {
+    // Verify against the admin-specific password
+    const valid = await bcrypt.compare(password, adminUser.admin_password_hash)
+    if (!valid) return { error: 'Invalid email or password.' }
+
+    // Create a session via magic link token (doesn't touch auth.users password)
+    const { data: linkData, error: linkError } = await service.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+    })
+    if (linkError) return { error: 'Failed to create session.' }
+
+    const { error: otpError } = await auth.auth.verifyOtp({
+      token_hash: linkData.properties.hashed_token,
+      type: 'email',
+    })
+    if (otpError) return { error: 'Failed to create session.' }
+  } else {
+    // No admin password set yet — fall back to Supabase auth
+    const { error: signInError } = await auth.auth.signInWithPassword({ email, password })
+    if (signInError) return { error: 'Invalid email or password.' }
+  }
+
+  // Record login
   const hdrs = await headers()
   const ip        = hdrs.get('x-forwarded-for')?.split(',')[0].trim() ?? hdrs.get('x-real-ip') ?? null
   const userAgent = hdrs.get('user-agent') ?? null

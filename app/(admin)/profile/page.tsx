@@ -1,6 +1,7 @@
 import { requireAdmin } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { EditNameForm } from './edit-name-form'
+import { ChangePasswordForm } from './reset-password-button'
 import { ACCESS_LEVEL_LABELS } from '@/types/admin'
 import { Shield } from 'lucide-react'
 
@@ -136,6 +137,16 @@ export default async function ProfilePage() {
         </div>
         <div className="px-5 py-5">
           <EditNameForm currentName={me?.full_name ?? null} />
+        </div>
+      </div>
+
+      {/* Security */}
+      <div className="rounded-[14px] border border-salty-border bg-warm-white overflow-hidden">
+        <div className="border-b border-salty-border px-5 py-4">
+          <h2 className="font-sora text-[14px] font-bold text-salty-text">Security</h2>
+        </div>
+        <div className="px-5 py-5">
+          <ChangePasswordForm />
         </div>
       </div>
 
