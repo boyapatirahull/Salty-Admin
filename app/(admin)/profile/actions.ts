@@ -26,7 +26,7 @@ export async function updatePasswordAction(newPassword: string) {
 
   const { error } = await db
     .from('admin_users')
-    .update({ admin_password_hash: hash })
+    .update({ admin_password_hash: hash, password_last_updated_at: new Date().toISOString() })
     .eq('id', admin.id)
 
   if (error) throw new Error('Failed to update password.')
