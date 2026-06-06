@@ -41,7 +41,7 @@ export async function loginAction(_: unknown, formData: FormData) {
 
     const { error: otpError } = await auth.auth.verifyOtp({
       token_hash: linkData.properties.hashed_token,
-      type: 'email',
+      type: 'magiclink',
     })
     if (otpError) return { error: 'Failed to create session.' }
   } else {

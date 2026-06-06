@@ -47,6 +47,7 @@ export function ChangePasswordForm() {
             onChange={e => { setNewPass(e.target.value); setSaved(false) }}
             placeholder="Min. 8 characters"
             className="text-[13px] pr-9"
+            autoComplete="new-password"
           />
           <button
             type="button"
@@ -68,6 +69,7 @@ export function ChangePasswordForm() {
             onChange={e => { setConfirm(e.target.value); setSaved(false) }}
             placeholder="Re-enter new password"
             className={`text-[13px] pr-9 ${mismatch ? 'border-[#BF4A3A]' : ''}`}
+            autoComplete="new-password"
             onKeyDown={e => e.key === 'Enter' && handleSave()}
           />
           <button
