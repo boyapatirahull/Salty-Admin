@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, BarChart3, Users, Ticket, Mail,
   Calendar, Database, Send, Bell, Settings,
-  ChevronRight, LogOut, Wifi, Activity,
+  ChevronRight, LogOut, Wifi, Activity, ShieldAlert,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAdmin } from './admin-provider'
@@ -48,7 +48,8 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/users/active',    label: 'Active Users',    icon: Activity, maxLevel: 3 },
       { href: '/tickets',         label: 'Tickets',         icon: Ticket,   maxLevel: 3, countVariant: 'gold' },
       { href: '/pending-imports',   label: 'Imports',          icon: Mail,     maxLevel: 2, countVariant: 'ember' },
-      { href: '/gmail-connections', label: 'Gmail',            icon: Wifi,     maxLevel: 2 },
+      { href: '/gmail-connections', label: 'Email Connections', icon: Wifi,   maxLevel: 2 },
+      { href: '/moderation',        label: 'Moderation',       icon: ShieldAlert, maxLevel: 3 },
       { href: '/feedback',          label: 'Feedback',         icon: Calendar, maxLevel: 3 },
       { href: '/notifications',     label: 'Notifications',    icon: Bell,     maxLevel: 3 },
     ],

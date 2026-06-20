@@ -7,15 +7,23 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { revokeGmailConnectionAction } from './actions'
+import { revokeGmailConnectionAction, revokeImapConnectionAction } from './actions'
 
-export function RevokeButton({ userId, userEmail }: { userId: string; userEmail: string }) {
+interface Props {
+  userId: string
+  userEmail: string
+  kind: 'gmail' | 'imap'
+  providerLabel: string
+}
+
+export function RevokeButton({ userId, userEmail, kind, providerLabel }: Props) {
   const [open, setOpen] = useState(false)
   const [pending, startTransition] = useTransition()
 
   function handleRevoke() {
     startTransition(async () => {
-      await revokeGmailConnectionAction(userId)
+      if (kind === 'gmail') await revokeGmailConnectionAction(userId)
+      else await revokeImapConnectionAction(userId)
       setOpen(false)
     })
   }
@@ -30,9 +38,9 @@ export function RevokeButton({ userId, userEmail }: { userId: string; userEmail:
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Revoke Gmail connection</DialogTitle>
+          <DialogTitle>Revoke {providerLabel} connection</DialogTitle>
           <DialogDescription>
-            This will disconnect the Gmail account from <strong>{userEmail}</strong>. The user will need to reconnect to resume Gmail imports.
+            This will disconnect {providerLabel} from <strong>{userEmail}</strong>. The user will need to reconnect to resume email imports.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

@@ -4,12 +4,26 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { TicketActivityChart } from '@/components/charts/ticket-activity-chart'
 import { CategoryDonutChart } from '@/components/charts/category-donut-chart'
 import {
-  Users, Ticket, MailOpen, Import,
+  Users, Ticket, MailOpen, Import, Wifi,
   TrendingUp, TrendingDown,
-  UserPlus, AlertTriangle, Check, X,
+  UserPlus, AlertTriangle, ShieldAlert, Settings,
 } from 'lucide-react'
 
 // ─── Data helpers ──────────────────────────────────────────────────────────────
+
+async function getActiveTodayCount(db: ReturnType<typeof createServiceClient>) {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000
+  let count = 0
+  let page = 1
+  while (page <= 5) {
+    const { data } = await db.auth.admin.listUsers({ page, perPage: 1000 })
+    const batch = data?.users ?? []
+    count += batch.filter(u => u.last_sign_in_at && new Date(u.last_sign_in_at).getTime() >= cutoff).length
+    if (batch.length < 1000) break
+    page++
+  }
+  return count
+}
 
 async function getDashboardData() {
   const db = createServiceClient()
@@ -17,21 +31,29 @@ async function getDashboardData() {
   const SIX_MONTHS_AGO = new Date()
   SIX_MONTHS_AGO.setMonth(SIX_MONTHS_AGO.getMonth() - 6)
   const cutoff = SIX_MONTHS_AGO.toISOString()
+  const nowIso = new Date().toISOString()
 
   const [
     { count: userCount },
     { count: ticketCount },
     { count: gmailCount },
+    { count: imapCount },
     { count: pendingCount },
+    { count: bannedCount },
+    activeTodayCount,
     { data: recentTickets },
     { data: recentUsers },
     { data: pendingImports },
     { data: recentFeedback },
+    { data: recentAuditLog },
   ] = await Promise.all([
     db.from('users').select('*', { count: 'exact', head: true }),
     db.from('tickets').select('*', { count: 'exact', head: true }),
     db.from('gmail_connections').select('*', { count: 'exact', head: true }),
+    db.from('imap_connections').select('*', { count: 'exact', head: true }),
     db.from('pending_imports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+    db.from('users').select('*', { count: 'exact', head: true }).not('banned_until', 'is', null).gt('banned_until', nowIso),
+    getActiveTodayCount(db),
     db.from('tickets').select('source, imported_at').gte('imported_at', cutoff),
     db.from('users').select('id, email, created_at').order('created_at', { ascending: false }).limit(6),
     db.from('pending_imports')
@@ -40,6 +62,8 @@ async function getDashboardData() {
       .order('created_at', { ascending: false })
       .limit(3),
     db.from('feedback').select('id, category, rating, message, status, created_at')
+      .order('created_at', { ascending: false }).limit(5),
+    db.from('admin_audit_log').select('id, admin_id, action, target_type, created_at')
       .order('created_at', { ascending: false }).limit(5),
   ])
 
@@ -53,7 +77,6 @@ async function getDashboardData() {
     if (t.source === 'gmail') byMonth[key].imports++
   }
 
-  // Build ordered last-6-months labels
   const monthLabels: string[] = []
   for (let i = 5; i >= 0; i--) {
     const d = new Date()
@@ -82,35 +105,47 @@ async function getDashboardData() {
 
   const totalReviewed = (approvedCount ?? 0) + (rejectedCount ?? 0)
   const approveRate = totalReviewed > 0 ? Math.round((approvedCount ?? 0) / totalReviewed * 100) : 0
-  const gmailAdoption = (userCount ?? 0) > 0 ? Math.round((gmailCount ?? 0) / (userCount ?? 1) * 100) : 0
+  const emailConnectedCount = (gmailCount ?? 0) + (imapCount ?? 0)
+  const emailAdoption = (userCount ?? 0) > 0 ? Math.round(emailConnectedCount / (userCount ?? 1) * 100) : 0
+  const bannedPct = (userCount ?? 0) > 0 ? Math.round((bannedCount ?? 0) / (userCount ?? 1) * 100) : 0
 
-  // Recent activity: combine recent users + recent tickets into a feed
+  // Recent activity: combine recent users + feedback + admin actions into a single feed
   const activityFeed = [
-    ...(recentUsers ?? []).slice(0, 3).map((u) => ({
+    ...(recentUsers ?? []).slice(0, 2).map((u) => ({
       type: 'user' as const,
       title: 'New user signup',
       desc: u.email,
       time: new Date(u.created_at).toLocaleString(),
       ts: new Date(u.created_at).getTime(),
     })),
-    ...(recentFeedback ?? []).slice(0, 3).map((f: { id: string; category: string; rating: number; message: string; status: string; created_at: string }) => ({
+    ...(recentFeedback ?? []).slice(0, 2).map((f: { id: string; category: string; rating: number; message: string; status: string; created_at: string }) => ({
       type: 'feedback' as const,
       title: `${f.category} feedback`,
       desc: f.message.slice(0, 60) + (f.message.length > 60 ? '…' : ''),
       time: new Date(f.created_at).toLocaleString(),
       ts: new Date(f.created_at).getTime(),
     })),
-  ].sort((a, b) => b.ts - a.ts).slice(0, 5)
+    ...(recentAuditLog ?? []).map((a: { id: string; admin_id: string; action: string; target_type: string | null; created_at: string }) => ({
+      type: 'admin' as const,
+      title: a.action.replace(/_/g, ' '),
+      desc: a.target_type ? `on ${a.target_type.replace(/_/g, ' ')}` : 'admin action',
+      time: new Date(a.created_at).toLocaleString(),
+      ts: new Date(a.created_at).getTime(),
+    })),
+  ].sort((a, b) => b.ts - a.ts).slice(0, 6)
 
   return {
     userCount: userCount ?? 0,
     ticketCount: ticketCount ?? 0,
-    gmailCount: gmailCount ?? 0,
+    emailConnectedCount,
     pendingCount: pendingCount ?? 0,
+    bannedCount: bannedCount ?? 0,
+    bannedPct,
+    activeTodayCount,
     activityData,
     categoryData,
     approveRate,
-    gmailAdoption,
+    emailAdoption,
     pendingImports: pendingImports ?? [],
     activityFeed,
     recentUsers: recentUsers ?? [],
@@ -129,15 +164,8 @@ function StatCard({
   trend?: { value: string; up: boolean }
 }) {
   return (
-    <div
-      className="relative overflow-hidden rounded-[14px] border border-salty-border bg-warm-white p-5"
-      style={{ '--accent': accent } as React.CSSProperties}
-    >
-      {/* Bottom accent bar */}
-      <div
-        className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b-[14px]"
-        style={{ background: accent }}
-      />
+    <div className="relative overflow-hidden rounded-[14px] border border-salty-border bg-warm-white p-5">
+      <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b-[14px]" style={{ background: accent }} />
       <div
         className="mb-3.5 flex h-9 w-9 items-center justify-center rounded-[10px]"
         style={{ background: accent + '18', color: accent }}
@@ -164,6 +192,7 @@ function ActivityIcon({ type }: { type: string }) {
     ticket:   { bg: '#FDF0EA', color: '#E8581A', icon: Ticket },
     feedback: { bg: '#FFF8E6', color: '#C87A10', icon: AlertTriangle },
     import:   { bg: '#EAF4EE', color: '#3E8A5A', icon: MailOpen },
+    admin:    { bg: '#F3EBF8', color: '#7B44A8', icon: Settings },
   }
   const { bg, color, icon: Icon } = map[type] ?? map.ticket
   return (
@@ -199,11 +228,12 @@ function Panel({ title, action, children }: {
   )
 }
 
-function HealthBar({ label, pct, color }: { label: string; pct: number; color: string }) {
+function HealthBar({ label, pct, color, sub }: { label: string; pct: number; color: string; sub?: string }) {
   return (
     <div className="flex items-center justify-between border-b border-salty-border px-5 py-3 last:border-0">
       <div className="flex-1 mr-3">
         <p className="text-[13px] text-salty-secondary">{label}</p>
+        {sub && <p className="text-[11px] text-salty-muted">{sub}</p>}
         <div className="mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-stone">
           <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
         </div>
@@ -222,17 +252,18 @@ export default async function DashboardPage() {
   const d = await getDashboardData()
 
   const kpis = [
-    { label: 'Total Users',      value: d.userCount,    icon: Users,    accent: '#E8581A' },
-    { label: 'Tickets Stored',   value: d.ticketCount,  icon: Ticket,   accent: '#C8A96E' },
-    { label: 'Gmail Connected',  value: d.gmailCount,   icon: MailOpen, accent: '#5A9E6F' },
-    { label: 'Pending Review',   value: d.pendingCount, icon: Import,   accent: '#5A8FBF' },
+    { label: 'Total Users',      value: d.userCount,           icon: Users,       accent: '#E8581A' },
+    { label: 'Tickets Stored',   value: d.ticketCount,         icon: Ticket,      accent: '#C8A96E' },
+    { label: 'Email Connected',  value: d.emailConnectedCount, icon: MailOpen,    accent: '#5A9E6F' },
+    { label: 'Active Today',     value: d.activeTodayCount,    icon: Wifi,        accent: '#5A8FBF' },
+    { label: 'Pending Review',   value: d.pendingCount,        icon: Import,      accent: '#7B44A8' },
   ]
 
   return (
     <div className="p-7 space-y-6">
 
       {/* ── KPI row ── */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {kpis.map((k) => <StatCard key={k.label} {...k} />)}
       </div>
 
@@ -244,7 +275,7 @@ export default async function DashboardPage() {
           </div>
         </Panel>
 
-        <Panel title="Live Activity">
+        <Panel title="Live Activity" action={{ label: 'Audit log', href: '/settings/audit-log' }}>
           <div>
             {d.activityFeed.length === 0 ? (
               <p className="px-5 py-6 text-sm text-salty-muted">No recent activity</p>
@@ -256,7 +287,7 @@ export default async function DashboardPage() {
                 >
                   <ActivityIcon type={item.type} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-salty-text">{item.title}</p>
+                    <p className="truncate text-[13px] font-medium capitalize text-salty-text">{item.title}</p>
                     <p className="truncate text-[12px] text-salty-secondary">{item.desc}</p>
                     <p className="mt-0.5 text-[11px] text-salty-muted">{item.time}</p>
                   </div>
@@ -383,16 +414,18 @@ export default async function DashboardPage() {
         </Panel>
 
         {/* Platform health */}
-        <Panel title="Platform Health">
-          <HealthBar label="Gmail Adoption" pct={d.gmailAdoption}
-            color={d.gmailAdoption >= 50 ? '#3E8A5A' : d.gmailAdoption >= 25 ? '#C8A96E' : '#E8581A'} />
+        <Panel title="Platform Health" action={{ label: 'Moderation', href: '/moderation' }}>
+          <HealthBar label="Email Adoption" pct={d.emailAdoption}
+            color={d.emailAdoption >= 50 ? '#3E8A5A' : d.emailAdoption >= 25 ? '#C8A96E' : '#E8581A'} />
           <HealthBar label="Import Approval Rate" pct={d.approveRate}
             color={d.approveRate >= 70 ? '#3E8A5A' : d.approveRate >= 40 ? '#C8A96E' : '#E8581A'} />
-          <HealthBar
-            label="Pending Resolution"
-            pct={d.ticketCount > 0 ? Math.min(100, Math.round((1 - d.pendingCount / Math.max(d.ticketCount, 1)) * 100)) : 100}
-            color="#3E8A5A"
-          />
+          <div className="flex items-center justify-between border-b border-salty-border px-5 py-3 last:border-0">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-3.5 w-3.5 text-[#BF4A3A]" />
+              <span className="text-[13px] text-salty-secondary">Banned Users</span>
+            </div>
+            <span className="font-sora text-[15px] font-bold text-salty-text">{d.bannedCount}</span>
+          </div>
         </Panel>
 
       </div>

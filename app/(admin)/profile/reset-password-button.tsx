@@ -8,8 +8,10 @@ import { Label } from '@/components/ui/label'
 import { updatePasswordAction } from './actions'
 
 export function ChangePasswordForm() {
+  const [current, setCurrent]       = useState('')
   const [newPass, setNewPass]       = useState('')
   const [confirm, setConfirm]       = useState('')
+  const [showCurrent, setShowCurrent] = useState(false)
   const [showNew, setShowNew]       = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [saved, setSaved]           = useState(false)
@@ -17,7 +19,7 @@ export function ChangePasswordForm() {
   const [pending, startTransition]  = useTransition()
 
   const mismatch = confirm.length > 0 && newPass !== confirm
-  const canSave  = newPass.length >= 8 && newPass === confirm && !pending
+  const canSave  = current.length > 0 && newPass.length >= 8 && newPass === confirm && !pending
 
   function handleSave() {
     if (!canSave) return
@@ -25,8 +27,9 @@ export function ChangePasswordForm() {
     setSaved(false)
     startTransition(async () => {
       try {
-        await updatePasswordAction(newPass)
+        await updatePasswordAction(current, newPass)
         setSaved(true)
+        setCurrent('')
         setNewPass('')
         setConfirm('')
         setTimeout(() => setSaved(false), 3000)
@@ -38,6 +41,28 @@ export function ChangePasswordForm() {
 
   return (
     <div className="space-y-3 max-w-xs">
+      <div className="space-y-1.5">
+        <Label className="text-[13px]">Current password</Label>
+        <div className="relative">
+          <Input
+            type={showCurrent ? 'text' : 'password'}
+            value={current}
+            onChange={e => { setCurrent(e.target.value); setSaved(false) }}
+            placeholder="Your current password"
+            className="text-[13px] pr-9"
+            autoComplete="current-password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowCurrent(v => !v)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-salty-muted hover:text-salty-text"
+            tabIndex={-1}
+          >
+            {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+
       <div className="space-y-1.5">
         <Label className="text-[13px]">New password</Label>
         <div className="relative">

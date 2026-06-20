@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdmin, logAudit } from '@/lib/auth'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createAuthClient, createServiceClient } from '@/lib/supabase/server'
 import { assertUUID, assertString, assertEnum } from '@/lib/validate'
 
 const VALID_TIERS = ['free', 'premium', 'family'] as const
@@ -16,13 +16,27 @@ export async function deleteUserAction(userId: string) {
   const { data: user } = await db.from('users').select('id, email').eq('id', uid).single()
   if (!user) throw new Error('User not found.')
 
-  await Promise.all([
+  // ticket_attendees.user_id and .added_by are FK'd to users.id with NO ACTION (not CASCADE) —
+  // if this user was ever tagged as an attendee on *anyone's* ticket, those rows must be removed
+  // first or the final `users` delete below fails with a foreign-key violation. Several other
+  // tables (saved_events, followed_artists, imap_connections, photo_scan_jobs, sent_artist_alerts)
+  // have no FK constraint on user_id at all, so they won't block deletion but would otherwise be
+  // left as orphaned rows — including imap_connections.password, a residual plaintext credential
+  // for a user who's supposed to be fully deleted.
+  const results = await Promise.all([
+    db.from('ticket_attendees').delete().eq('user_id', uid),
+    db.from('ticket_attendees').delete().eq('added_by', uid),
     db.from('tickets').delete().eq('user_id', uid),
     db.from('pending_imports').delete().eq('user_id', uid),
     db.from('notifications').delete().eq('user_id', uid),
     db.from('notification_tokens').delete().eq('user_id', uid),
     db.from('friendships').delete().or(`requester_id.eq.${uid},addressee_id.eq.${uid}`),
     db.from('gmail_connections').delete().eq('user_id', uid),
+    db.from('imap_connections').delete().eq('user_id', uid),
+    db.from('saved_events').delete().eq('user_id', uid),
+    db.from('followed_artists').delete().eq('user_id', uid),
+    db.from('photo_scan_jobs').delete().eq('user_id', uid),
+    db.from('sent_artist_alerts').delete().eq('user_id', uid),
     db.from('feedback').update({ user_id: null }).eq('user_id', uid),
     db.storage.from('avatars').remove([
       `${uid}/avatar.jpg`, `${uid}/avatar.jpeg`,
@@ -30,11 +44,56 @@ export async function deleteUserAction(userId: string) {
     ]),
   ])
 
-  await db.from('users').delete().eq('id', uid)
-  await db.auth.admin.deleteUser(uid)
+  const failed = results.find(r => 'error' in r && r.error)
+  if (failed && 'error' in failed && failed.error) {
+    throw new Error(`Failed to clean up related data: ${failed.error.message}`)
+  }
 
-  await logAudit(admin.id, 'delete_user', 'user', uid)
+  // If this same email is also registered as an admin (admin_users.email), guard against
+  // breaking or accidentally removing admin access before we touch the shared auth account.
+  const { data: matchingAdmin } = await db
+    .from('admin_users')
+    .select('id, email, access_level, is_active')
+    .eq('email', user.email)
+    .maybeSingle()
+
+  if (matchingAdmin) {
+    if (matchingAdmin.id === admin.id) {
+      throw new Error('This email is your own admin account — you cannot delete it this way.')
+    }
+    if (matchingAdmin.access_level === 1 && matchingAdmin.is_active) {
+      const { count } = await db
+        .from('admin_users')
+        .select('*', { count: 'exact', head: true })
+        .eq('access_level', 1)
+        .eq('is_active', true)
+      if ((count ?? 0) <= 1) {
+        throw new Error('This email is the last active Super Admin — cannot delete the underlying account.')
+      }
+    }
+  }
+
+  const { error: deleteErr } = await db.from('users').delete().eq('id', uid)
+  if (deleteErr) throw new Error(`Failed to delete user: ${deleteErr.message}`)
+
+  const { error: authErr } = await db.auth.admin.deleteUser(uid)
+  if (authErr) throw new Error(`User row deleted but auth account removal failed: ${authErr.message}`)
+
+  // The Supabase Auth account we just deleted is the same one admin login depends on
+  // (via magic-link OTP or signInWithPassword) — so if this email also had an admin_users
+  // row, that admin can no longer authenticate at all. Remove the row explicitly instead of
+  // leaving a dangling "Active" admin entry that's actually unusable.
+  if (matchingAdmin) {
+    await db.from('admin_users').delete().eq('id', matchingAdmin.id)
+    await logAudit(admin.id, 'delete_admin_via_user_deletion', 'admin_user', matchingAdmin.id, {
+      email: matchingAdmin.email,
+      access_level: matchingAdmin.access_level,
+    })
+  }
+
+  await logAudit(admin.id, 'delete_user', 'user', uid, { email: user.email })
   revalidatePath('/users')
+  if (matchingAdmin) revalidatePath('/settings/admin-users')
 }
 
 export async function sendNotificationAction(userId: string, title: string, body: string) {
@@ -70,7 +129,11 @@ export async function sendPasswordResetAction(userId: string) {
   const { data: user } = await db.from('users').select('id, email').eq('id', uid).single()
   if (!user) throw new Error('User not found.')
 
-  const { error } = await db.auth.admin.generateLink({ type: 'recovery', email: user.email })
+  // auth.admin.generateLink() only generates a token, it never sends an email — it must be
+  // paired with resetPasswordForEmail() on the anon-key client, which triggers Supabase's
+  // actual "Reset Password" email template and delivery.
+  const authClient = await createAuthClient()
+  const { error } = await authClient.auth.resetPasswordForEmail(user.email)
   if (error) throw new Error('Failed to send password reset email.')
 
   await logAudit(admin.id, 'password_reset_sent', 'user', uid)

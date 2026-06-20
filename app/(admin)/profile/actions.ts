@@ -16,13 +16,28 @@ export async function updateProfileAction(fullName: string) {
   revalidatePath('/profile')
 }
 
-export async function updatePasswordAction(newPassword: string) {
+export async function updatePasswordAction(currentPassword: string, newPassword: string) {
   const admin = await requireAdmin()
   const pass  = assertString(newPassword, 'Password', 128)
   if (pass.length < 8) throw new Error('Password must be at least 8 characters.')
 
+  const db = createServiceClient()
+
+  const { data: row } = await db
+    .from('admin_users')
+    .select('admin_password_hash')
+    .eq('id', admin.id)
+    .single()
+
+  // If a password is already set, the caller must prove they know it before rotating it.
+  // (First-time setup, when no hash exists yet, skips this check.)
+  if (row?.admin_password_hash) {
+    const current = assertString(currentPassword, 'Current password', 128)
+    const valid = await bcrypt.compare(current, row.admin_password_hash)
+    if (!valid) throw new Error('Current password is incorrect.')
+  }
+
   const hash = await bcrypt.hash(pass, 12)
-  const db   = createServiceClient()
 
   const { error } = await db
     .from('admin_users')

@@ -49,6 +49,12 @@ export default async function UserDetailPage({ params }: PageProps) {
 
   const lastSignIn: string | null = authUserResult.data?.user?.last_sign_in_at ?? null
 
+  const { data: matchingAdmin } = await db
+    .from('admin_users')
+    .select('id')
+    .eq('email', user.email)
+    .maybeSingle()
+
   await logAudit(admin.id, 'view_user_profile', 'user', id)
 
   // Resolve friend profiles
@@ -152,7 +158,7 @@ export default async function UserDetailPage({ params }: PageProps) {
           {canManageAuth && <ResetPasswordButton userId={id} userEmail={user.email} />}
           {canManageAuth && <ForceSignOutButton userId={id} userEmail={user.email} />}
           {canBan && <BanUserDialog userId={id} userEmail={user.email} bannedUntil={user.banned_until ?? null} />}
-          {canDelete && <DeleteUserButton userId={id} userEmail={user.email} />}
+          {canDelete && <DeleteUserButton userId={id} userEmail={user.email} alsoAdmin={!!matchingAdmin} />}
         </div>
       )}
 

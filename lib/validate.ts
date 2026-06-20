@@ -44,3 +44,12 @@ export function assertAccessLevel(value: unknown): 1 | 2 | 3 | 4 {
   if (![1, 2, 3, 4].includes(n)) throw new Error('Access level must be 1, 2, 3 or 4.')
   return n as 1 | 2 | 3 | 4
 }
+
+/**
+ * Strip characters that are syntactically significant in a PostgREST `.or()` filter string
+ * (comma separates conditions, parens group them) before interpolating user input into one.
+ * Without this, a search term like `,id.neq.<uuid>` could inject additional filter clauses.
+ */
+export function sanitizeOrFilterTerm(value: string, max = 200): string {
+  return value.replace(/[,()]/g, '').slice(0, max).trim()
+}

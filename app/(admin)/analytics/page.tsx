@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { CategoryDonutChart } from '@/components/charts/category-donut-chart'
@@ -5,11 +6,19 @@ import { TicketActivityChart } from '@/components/charts/ticket-activity-chart'
 import { NewUsersChart } from '@/components/charts/new-users-chart'
 import { TicketSourceChart } from '@/components/charts/ticket-source-chart'
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, action, children }: { title: string; action?: { label: string; href: string }; children: React.ReactNode }) {
   return (
     <div className="overflow-hidden rounded-[14px] border border-salty-border bg-warm-white">
-      <div className="border-b border-salty-border px-5 py-4">
+      <div className="flex items-center gap-2.5 border-b border-salty-border px-5 py-4">
         <h2 className="font-sora text-[14px] font-bold text-salty-text">{title}</h2>
+        {action && (
+          <Link
+            href={action.href}
+            className="ml-auto rounded-md border border-ember-mid bg-ember-light px-2.5 py-1 text-[12px] font-semibold text-ember transition-colors hover:bg-ember-mid"
+          >
+            {action.label}
+          </Link>
+        )}
       </div>
       {children}
     </div>
@@ -28,6 +37,30 @@ function StatRow({ label, value, sub }: { label: string; value: string | number;
   )
 }
 
+async function getActiveUserCounts(db: ReturnType<typeof createServiceClient>) {
+  type AuthUser = { last_sign_in_at?: string | null }
+  const authUsers: AuthUser[] = []
+  let page = 1
+  while (page <= 5) {
+    const { data } = await db.auth.admin.listUsers({ page, perPage: 1000 })
+    const batch = (data?.users ?? []) as AuthUser[]
+    authUsers.push(...batch)
+    if (batch.length < 1000) break
+    page++
+  }
+
+  const now = Date.now()
+  const within = (ms: number) => authUsers.filter(
+    u => u.last_sign_in_at && now - new Date(u.last_sign_in_at).getTime() <= ms,
+  ).length
+
+  return {
+    dau: within(24 * 60 * 60 * 1000),
+    wau: within(7 * 24 * 60 * 60 * 1000),
+    mau: within(30 * 24 * 60 * 60 * 1000),
+  }
+}
+
 export default async function AnalyticsPage() {
   await requireAdmin()
   const db = createServiceClient()
@@ -38,25 +71,45 @@ export default async function AnalyticsPage() {
 
   const THIRTY_DAYS_AGO = new Date()
   THIRTY_DAYS_AGO.setDate(THIRTY_DAYS_AGO.getDate() - 30)
+  const nowIso = new Date().toISOString()
+  const SEVEN_DAYS_AGO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [
     { count: totalUsers },
     { count: totalTickets },
     { count: gmailConnected },
+    { count: imapConnected },
+    { count: bannedCount },
     { data: friendships },
     { data: tickets6m },
     { data: allTickets },
     { data: allImports },
     { data: newUsersRaw },
+    { data: tierRows },
+    { count: photoCount },
+    { count: noteCount },
+    { count: tagCount },
+    { count: auditTotal },
+    { data: auditWeek },
+    activeUsers,
   ] = await Promise.all([
     db.from('users').select('*', { count: 'exact', head: true }),
     db.from('tickets').select('*', { count: 'exact', head: true }),
     db.from('gmail_connections').select('*', { count: 'exact', head: true }),
+    db.from('imap_connections').select('*', { count: 'exact', head: true }),
+    db.from('users').select('*', { count: 'exact', head: true }).not('banned_until', 'is', null).gt('banned_until', nowIso),
     db.from('friendships').select('status'),
     db.from('tickets').select('source, category, imported_at').gte('imported_at', cutoff),
     db.from('tickets').select('category, venue_name, source'),
     db.from('pending_imports').select('status'),
     db.from('users').select('created_at').gte('created_at', THIRTY_DAYS_AGO.toISOString()),
+    db.from('users').select('tier'),
+    db.from('photos').select('*', { count: 'exact', head: true }),
+    db.from('ticket_notes').select('*', { count: 'exact', head: true }),
+    db.from('ticket_tags').select('*', { count: 'exact', head: true }),
+    db.from('admin_audit_log').select('*', { count: 'exact', head: true }),
+    db.from('admin_audit_log').select('admin_id').gte('created_at', SEVEN_DAYS_AGO),
+    getActiveUserCounts(db),
   ])
 
   // ── Ticket activity by month ─────────────────────────────────────────
@@ -88,7 +141,7 @@ export default async function AnalyticsPage() {
 
   // ── Friendship stats ─────────────────────────────────────────────────
   const accepted = (friendships ?? []).filter(f => f.status === 'accepted').length
-  const pending  = (friendships ?? []).filter(f => f.status === 'pending').length
+  const pendingFriends = (friendships ?? []).filter(f => f.status === 'pending').length
   const avgFriends = totalUsers ? (accepted * 2 / totalUsers).toFixed(1) : '0'
 
   // ── Import stats ─────────────────────────────────────────────────────
@@ -96,12 +149,13 @@ export default async function AnalyticsPage() {
   const rejectedImports = (allImports ?? []).filter(i => i.status === 'rejected').length
   const totalReviewed = approvedImports + rejectedImports
   const approvalRate = totalReviewed > 0 ? Math.round(approvedImports / totalReviewed * 100) : 0
-  const gmailRate = totalUsers ? Math.round((gmailConnected ?? 0) / totalUsers * 100) : 0
+  const emailConnectedCount = (gmailConnected ?? 0) + (imapConnected ?? 0)
+  const emailRate = totalUsers ? Math.round(emailConnectedCount / totalUsers * 100) : 0
 
   // ── New users per day (last 30 days) ─────────────────────────────────
   const dayMap: Record<string, number> = {}
   for (const u of newUsersRaw ?? []) {
-    const day = u.created_at.slice(0, 10) // 'YYYY-MM-DD'
+    const day = u.created_at.slice(0, 10)
     dayMap[day] = (dayMap[day] ?? 0) + 1
   }
   const newUsersData: { day: string; count: number }[] = []
@@ -117,6 +171,25 @@ export default async function AnalyticsPage() {
   for (const t of allTickets ?? []) srcMap[t.source] = (srcMap[t.source] ?? 0) + 1
   const sourceData = Object.entries(srcMap).map(([source, count]) => ({ source, count }))
 
+  // ── Tier distribution ───────────────────────────────────────────────
+  const tierMap: Record<string, number> = { free: 0, premium: 0, family: 0 }
+  for (const u of tierRows ?? []) {
+    const t = u.tier ?? 'free'
+    tierMap[t] = (tierMap[t] ?? 0) + 1
+  }
+
+  // ── Admin activity ──────────────────────────────────────────────────
+  const adminCountMap: Record<string, number> = {}
+  for (const a of auditWeek ?? []) adminCountMap[a.admin_id] = (adminCountMap[a.admin_id] ?? 0) + 1
+  const topAdminId = Object.entries(adminCountMap).sort((a, b) => b[1] - a[1])[0]
+  let topAdminLabel = '—'
+  if (topAdminId) {
+    const { data: topAdmin } = await db.from('admin_users').select('email, full_name').eq('id', topAdminId[0]).maybeSingle()
+    topAdminLabel = topAdmin?.full_name ?? topAdmin?.email ?? '—'
+  }
+
+  const bannedPct = totalUsers ? Math.round((bannedCount ?? 0) / totalUsers * 100) : 0
+
   return (
     <div className="p-7 space-y-6">
       <div>
@@ -125,12 +198,13 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {[
           { label: 'Total Users',       value: (totalUsers ?? 0).toLocaleString(),   accent: '#E8581A' },
           { label: 'Total Tickets',     value: (totalTickets ?? 0).toLocaleString(), accent: '#C8A96E' },
-          { label: 'Gmail Adoption',    value: `${gmailRate}%`,                       accent: '#5A9E6F' },
+          { label: 'Email Adoption',    value: `${emailRate}%`,                       accent: '#5A9E6F' },
           { label: 'Import Approval',   value: `${approvalRate}%`,                    accent: '#5A8FBF' },
+          { label: 'Banned Users',      value: (bannedCount ?? 0).toLocaleString(),  accent: '#BF4A3A' },
         ].map(c => (
           <div key={c.label} className="relative overflow-hidden rounded-[14px] border border-salty-border bg-warm-white p-5">
             <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b-[14px]" style={{ background: c.accent }} />
@@ -139,6 +213,22 @@ export default async function AnalyticsPage() {
           </div>
         ))}
       </div>
+
+      {/* Active users */}
+      <Panel title="Active Users" action={{ label: 'View list', href: '/users/active' }}>
+        <div className="grid grid-cols-3 divide-x divide-salty-border">
+          {[
+            { label: 'Daily Active (24h)',  value: activeUsers.dau },
+            { label: 'Weekly Active (7d)',   value: activeUsers.wau },
+            { label: 'Monthly Active (30d)', value: activeUsers.mau },
+          ].map(s => (
+            <div key={s.label} className="px-5 py-4 text-center">
+              <p className="font-sora text-[26px] font-bold text-salty-text">{s.value}</p>
+              <p className="mt-0.5 text-[12px] text-salty-muted">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
 
       {/* Ticket activity + Category */}
       <div className="grid gap-5 lg:grid-cols-2">
@@ -198,10 +288,31 @@ export default async function AnalyticsPage() {
         </Panel>
 
         <Panel title="Platform Health">
-          <StatRow label="Gmail Adoption Rate" value={`${gmailRate}%`} sub={`${gmailConnected} of ${totalUsers} users connected`} />
+          <StatRow label="Email Adoption" value={`${emailRate}%`} sub={`${emailConnectedCount} of ${totalUsers} users (Gmail + IMAP)`} />
           <StatRow label="Import Approval Rate" value={`${approvalRate}%`} sub={`${approvedImports} approved / ${rejectedImports} rejected`} />
-          <StatRow label="Avg Friends per User" value={avgFriends} sub={`${accepted} accepted · ${pending} pending`} />
-          <StatRow label="Total Friendships" value={accepted + pending} sub={`${accepted} accepted`} />
+          <StatRow label="Avg Friends per User" value={avgFriends} sub={`${accepted} accepted · ${pendingFriends} pending`} />
+          <StatRow label="Banned Users" value={`${bannedPct}%`} sub={`${bannedCount ?? 0} of ${totalUsers} users`} />
+        </Panel>
+      </div>
+
+      {/* Tiers + Content moderation + Admin activity */}
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Panel title="User Tiers" action={{ label: 'View users', href: '/users' }}>
+          <StatRow label="Free" value={tierMap.free} sub={totalUsers ? `${Math.round(tierMap.free / totalUsers * 100)}%` : undefined} />
+          <StatRow label="Premium" value={tierMap.premium} sub={totalUsers ? `${Math.round(tierMap.premium / totalUsers * 100)}%` : undefined} />
+          <StatRow label="Family" value={tierMap.family} sub={totalUsers ? `${Math.round(tierMap.family / totalUsers * 100)}%` : undefined} />
+        </Panel>
+
+        <Panel title="Content Moderation" action={{ label: 'Review', href: '/moderation' }}>
+          <StatRow label="Photos" value={photoCount ?? 0} />
+          <StatRow label="Ticket Notes" value={noteCount ?? 0} />
+          <StatRow label="Ticket Tags" value={tagCount ?? 0} />
+        </Panel>
+
+        <Panel title="Admin Activity" action={{ label: 'Audit log', href: '/settings/audit-log' }}>
+          <StatRow label="Total Events Logged" value={(auditTotal ?? 0).toLocaleString()} />
+          <StatRow label="Events (Last 7 Days)" value={(auditWeek ?? []).length} />
+          <StatRow label="Most Active Admin" value={topAdminLabel} sub="last 7 days" />
         </Panel>
       </div>
     </div>

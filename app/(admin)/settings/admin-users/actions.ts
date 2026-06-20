@@ -99,3 +99,86 @@ export async function toggleActiveAction(targetAdminId: string, active: boolean)
   )
   revalidatePath('/settings/admin-users')
 }
+
+interface DeleteAdminResult {
+  ok: true
+}
+interface DeleteAdminBlocked {
+  ok: false
+  requiresForce: true
+  auditCount: number
+}
+
+export async function deleteAdminAction(
+  targetAdminId: string,
+  force = false,
+): Promise<DeleteAdminResult | DeleteAdminBlocked> {
+  const admin = await requireAdmin(1)
+  const tid   = assertUUID(targetAdminId, 'Admin ID')
+
+  if (tid === admin.id) throw new Error('You cannot delete your own admin account.')
+
+  const db = createServiceClient()
+  const { data: target } = await db.from('admin_users').select('id, email, access_level').eq('id', tid).single()
+  if (!target) throw new Error('Admin not found.')
+
+  // Never let the last active Super Admin be removed — that would lock everyone
+  // out of /settings/admin-users, since it requires access_level 1. Not overridable by force.
+  if (target.access_level === 1) {
+    const { count } = await db
+      .from('admin_users')
+      .select('*', { count: 'exact', head: true })
+      .eq('access_level', 1)
+      .eq('is_active', true)
+    if ((count ?? 0) <= 1) throw new Error('Cannot delete the last active Super Admin.')
+  }
+
+  // admin_audit_log.admin_id is a NOT NULL, NO ACTION (not CASCADE) foreign key — if this
+  // admin has ever performed a logged action, deleting the admin_users row below would fail
+  // with a foreign-key violation unless those audit rows are removed first. That's a real
+  // destructive step (it erases this admin's history), so it only happens when the caller
+  // explicitly passes force=true after being told exactly how many rows are at stake.
+  const { count: auditCount } = await db
+    .from('admin_audit_log')
+    .select('*', { count: 'exact', head: true })
+    .eq('admin_id', tid)
+
+  if ((auditCount ?? 0) > 0 && !force) {
+    return { ok: false, requiresForce: true, auditCount: auditCount ?? 0 }
+  }
+
+  if (force && (auditCount ?? 0) > 0) {
+    const { error: purgeErr } = await db.from('admin_audit_log').delete().eq('admin_id', tid)
+    if (purgeErr) throw new Error(`Failed to purge audit history: ${purgeErr.message}`)
+  }
+
+  // admin_users.invited_by is also NO ACTION — sever that link first. Unlike audit log rows,
+  // this is just "who invited them" metadata, safe to null out unconditionally.
+  const { error: inviteUnlinkErr } = await db
+    .from('admin_users')
+    .update({ invited_by: null })
+    .eq('invited_by', tid)
+  if (inviteUnlinkErr) throw new Error(`Failed to update invited-by references: ${inviteUnlinkErr.message}`)
+
+  // Remove their Supabase auth account too, so they lose all access immediately —
+  // not just the admin_users row.
+  const { data: authUsers } = await db.auth.admin.listUsers()
+  const authUser = authUsers?.users?.find(u => u.email === target.email)
+  if (authUser) {
+    const { error: authErr } = await db.auth.admin.deleteUser(authUser.id)
+    if (authErr) throw new Error(`Failed to delete auth account: ${authErr.message}`)
+  }
+
+  const { error: deleteErr } = await db.from('admin_users').delete().eq('id', tid)
+  if (deleteErr) throw new Error(`Failed to delete admin: ${deleteErr.message}`)
+
+  // Logged under the ACTING admin — the target's own audit history may have just been purged,
+  // so this is the only remaining record that a forced deletion happened and what it cost.
+  await logAudit(admin.id, (auditCount ?? 0) > 0 ? 'force_delete_admin' : 'delete_admin', 'admin_user', tid, {
+    email: target.email,
+    access_level: target.access_level,
+    audit_entries_purged: force ? (auditCount ?? 0) : 0,
+  })
+  revalidatePath('/settings/admin-users')
+  return { ok: true }
+}

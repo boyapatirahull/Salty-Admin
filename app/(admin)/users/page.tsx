@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { maskEmail } from '@/lib/privacy'
+import { sanitizeOrFilterTerm } from '@/lib/validate'
 import { Badge } from '@/components/ui/badge'
 import { UserSearch } from './user-search'
 import { ExternalLink, Download } from 'lucide-react'
@@ -32,23 +33,30 @@ export default async function UsersPage({ searchParams }: PageProps) {
     .order('created_at', { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1)
 
-  if (q)   query = query.or(`email.ilike.%${q}%,username.ilike.%${q}%,display_name.ilike.%${q}%`)
+  if (q) {
+    const safeQ = sanitizeOrFilterTerm(q)
+    if (safeQ) query = query.or(`email.ilike.%${safeQ}%,username.ilike.%${safeQ}%,display_name.ilike.%${safeQ}%`)
+  }
   if (zip)  query = query.ilike('zip_code', `%${zip}%`)
   if (tier) query = query.eq('tier', tier)
 
   const { data: users, count } = await query
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
 
-  // Ticket counts
+  // Ticket counts + connection status
+  // NOTE: only ever select user_id/provider here — gmail_connections.access_token/refresh_token
+  // and imap_connections.password/imap_host are credentials and must never be queried in a list view.
   const ids = (users ?? []).map(u => u.id)
-  const [{ data: ticketCounts }, { data: gmailConns }] = await Promise.all([
-    ids.length > 0 ? db.from('tickets').select('user_id').in('user_id', ids) : Promise.resolve({ data: [] }),
+  const [{ data: ticketCounts }, { data: gmailConns }, { data: imapConns }] = await Promise.all([
+    ids.length > 0 ? db.from('tickets').select('user_id') .in('user_id', ids) : Promise.resolve({ data: [] }),
     ids.length > 0 ? db.from('gmail_connections').select('user_id').in('user_id', ids) : Promise.resolve({ data: [] }),
+    ids.length > 0 ? db.from('imap_connections').select('user_id, provider').in('user_id', ids) : Promise.resolve({ data: [] }),
   ])
 
   const ticketMap: Record<string, number> = {}
   for (const t of ticketCounts ?? []) ticketMap[t.user_id] = (ticketMap[t.user_id] ?? 0) + 1
   const gmailSet = new Set((gmailConns ?? []).map((g: { user_id: string }) => g.user_id))
+  const imapMap = new Map((imapConns ?? []).map((c: { user_id: string; provider: string }) => [c.user_id, c.provider]))
 
   return (
     <div className="p-7 space-y-5">
@@ -77,7 +85,7 @@ export default async function UsersPage({ searchParams }: PageProps) {
           <table className="w-full">
             <thead>
               <tr className="border-b border-salty-border bg-cream">
-                {['User','Username','Tier','Zip','Tickets','Gmail','Joined',''].map(h => (
+                {['User','Username','Tier','Zip','Tickets','Connection','Joined',''].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-salty-muted">{h}</th>
                 ))}
               </tr>
@@ -106,10 +114,19 @@ export default async function UsersPage({ searchParams }: PageProps) {
                     <td className="px-4 py-3 text-[12px] text-salty-secondary">{u.zip_code ?? '—'}</td>
                     <td className="px-4 py-3 text-[13px] text-salty-text font-medium">{ticketMap[u.id] ?? 0}</td>
                     <td className="px-4 py-3">
-                      {gmailSet.has(u.id)
-                        ? <span className="rounded-full bg-[#EAF4EE] px-2.5 py-0.5 text-[11px] font-semibold text-[#3E8A5A]">Connected</span>
-                        : <span className="text-[12px] text-salty-muted">—</span>
-                      }
+                      <div className="flex flex-wrap gap-1">
+                        {gmailSet.has(u.id) && (
+                          <span className="rounded-full bg-[#EBF2FA] px-2 py-0.5 text-[10px] font-semibold text-[#3A72A8]">Gmail</span>
+                        )}
+                        {imapMap.has(u.id) && (
+                          <span className="rounded-full bg-gold-light px-2 py-0.5 text-[10px] font-semibold capitalize text-gold">
+                            {imapMap.get(u.id)}
+                          </span>
+                        )}
+                        {!gmailSet.has(u.id) && !imapMap.has(u.id) && (
+                          <span className="text-[12px] text-salty-muted">—</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-[12px] text-salty-secondary whitespace-nowrap">
                       {new Date(u.created_at).toLocaleDateString()}

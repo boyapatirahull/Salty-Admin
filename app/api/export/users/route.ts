@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, logAudit } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { maskEmail } from '@/lib/privacy'
+import { sanitizeOrFilterTerm } from '@/lib/validate'
 
 export async function GET(req: NextRequest) {
   const admin = await requireAdmin(1)
@@ -17,7 +18,10 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(10000)
 
-  if (q)   query = query.or(`email.ilike.%${q}%,username.ilike.%${q}%,display_name.ilike.%${q}%`)
+  if (q) {
+    const safeQ = sanitizeOrFilterTerm(q)
+    if (safeQ) query = query.or(`email.ilike.%${safeQ}%,username.ilike.%${safeQ}%,display_name.ilike.%${safeQ}%`)
+  }
   if (zip)  query = query.ilike('zip_code', `%${zip}%`)
   if (tier) query = query.eq('tier', tier)
 
@@ -45,6 +49,12 @@ export async function GET(req: NextRequest) {
       new Date(u.created_at).toISOString(),
     ].join(',')),
   ]
+
+  // Bulk PII export — always audited regardless of row count
+  await logAudit(admin.id, 'export_users_csv', undefined, undefined, {
+    filters: { q, zip, tier },
+    row_count: users?.length ?? 0,
+  })
 
   return new NextResponse(rows.join('\n'), {
     headers: {

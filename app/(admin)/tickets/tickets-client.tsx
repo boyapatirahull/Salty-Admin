@@ -9,7 +9,7 @@ import { editTicketAction, deleteTicketAction } from './actions'
 import { useAccessLevel } from '@/components/admin-provider'
 
 const CATEGORIES = ['concert','sports','theater','dining','festival','trip','other']
-const SOURCES    = ['gmail','manual','calendar']
+const SOURCES    = ['gmail','calendar','wallet','manual','photo']
 const STATUSES   = ['active','archived','pending']
 
 interface Ticket {
@@ -99,9 +99,11 @@ function TicketRow({ ticket, canEdit, canDelete }: { ticket: Ticket; canEdit: bo
   }
 
   const srcColor: Record<string, string> = {
-    gmail: 'bg-[#EBF2FA] text-[#3A72A8]',
-    manual: 'bg-stone text-salty-secondary',
+    gmail:    'bg-[#EBF2FA] text-[#3A72A8]',
     calendar: 'bg-[#EAF4EE] text-[#3E8A5A]',
+    wallet:   'bg-gold-light text-gold',
+    photo:    'bg-[#F3EBF8] text-[#7B44A8]',
+    manual:   'bg-stone text-salty-secondary',
   }
 
   const inp = 'rounded border border-salty-border bg-cream px-2 py-0.5 text-[12px] text-salty-text focus:border-ember focus:outline-none w-full'

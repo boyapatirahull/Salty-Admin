@@ -1,9 +1,14 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Loader2, UserPlus, Shield } from 'lucide-react'
-import { inviteAdminAction, changeAccessLevelAction, toggleActiveAction } from './actions'
+import { Loader2, UserPlus, Shield, Trash2 } from 'lucide-react'
+import { inviteAdminAction, changeAccessLevelAction, toggleActiveAction, deleteAdminAction } from './actions'
 import { ACCESS_LEVEL_LABELS } from '@/types/admin'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 
 interface AdminRow {
   id: string
@@ -172,19 +177,106 @@ function AdminUserRow({ row, isSelf }: { row: AdminRow; isSelf: boolean }) {
       <td className="px-4 py-3 text-[12px] text-salty-secondary">{row.invited_by_email ?? '—'}</td>
       <td className="px-4 py-3">
         {!isSelf && (
-          <button
-            onClick={toggle}
-            disabled={pending}
-            className={`text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors ${
-              row.is_active
-                ? 'border-[#F0C4C4] bg-[#FDEDED] text-[#BF4A3A] hover:bg-[#F5D0D0]'
-                : 'border-[#B8D9C5] bg-[#EAF4EE] text-[#3E8A5A] hover:bg-[#C9E8D6]'
-            }`}
-          >
-            {pending ? '…' : row.is_active ? 'Deactivate' : 'Reactivate'}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={toggle}
+              disabled={pending}
+              className={`text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors ${
+                row.is_active
+                  ? 'border-[#F0C4C4] bg-[#FDEDED] text-[#BF4A3A] hover:bg-[#F5D0D0]'
+                  : 'border-[#B8D9C5] bg-[#EAF4EE] text-[#3E8A5A] hover:bg-[#C9E8D6]'
+              }`}
+            >
+              {pending ? '…' : row.is_active ? 'Deactivate' : 'Reactivate'}
+            </button>
+            <DeleteAdminDialog adminId={row.id} adminEmail={row.email} />
+          </div>
         )}
       </td>
     </tr>
+  )
+}
+
+function DeleteAdminDialog({ adminId, adminEmail }: { adminId: string; adminEmail: string }) {
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [auditBlock, setAuditBlock] = useState<{ auditCount: number } | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  function attemptDelete(force: boolean) {
+    setError(null)
+    startTransition(async () => {
+      try {
+        const result = await deleteAdminAction(adminId, force)
+        if (!result.ok) {
+          setAuditBlock({ auditCount: result.auditCount })
+          return
+        }
+        setOpen(false)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to delete admin.')
+      }
+    })
+  }
+
+  function reset(v: boolean) {
+    setOpen(v)
+    if (!v) { setError(null); setAuditBlock(null) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={reset}>
+      <DialogTrigger asChild>
+        <button
+          title="Delete admin"
+          className="rounded-md border border-salty-border p-1.5 text-salty-muted transition-colors hover:bg-[#FDEDED] hover:text-[#BF4A3A] hover:border-[#F0C4C4]"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete admin account</DialogTitle>
+          <DialogDescription>
+            This will permanently remove <strong>{adminEmail}</strong> from the admin panel and delete their
+            login credentials. They will lose all access immediately. This cannot be undone — invite them again
+            if access needs to be restored later.
+          </DialogDescription>
+        </DialogHeader>
+
+        {auditBlock && (
+          <div className="rounded-lg border border-[#F0C4C4] bg-[#FDEDED] px-3 py-2.5 text-[13px] text-[#BF4A3A] space-y-1">
+            <p className="font-semibold">
+              This admin has {auditBlock.auditCount} audit log entr{auditBlock.auditCount === 1 ? 'y' : 'ies'}.
+            </p>
+            <p>
+              Deleting anyway will also permanently erase {auditBlock.auditCount === 1 ? 'that entry' : 'those entries'} —
+              there will be no record of what this admin did. Consider Deactivate instead if you just need to revoke access.
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-lg border border-[#F0C4C4] bg-[#FDEDED] px-3 py-2.5 text-[13px] text-[#BF4A3A]">
+            {error}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
+          {auditBlock ? (
+            <Button variant="destructive" onClick={() => attemptDelete(true)} disabled={pending}>
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {pending ? 'Deleting…' : `Delete anyway (purge ${auditBlock.auditCount})`}
+            </Button>
+          ) : (
+            <Button variant="destructive" onClick={() => attemptDelete(false)} disabled={pending}>
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {pending ? 'Deleting…' : 'Delete permanently'}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

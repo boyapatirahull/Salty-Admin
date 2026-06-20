@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, logAudit } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { maskEmail } from '@/lib/privacy'
 
@@ -62,6 +62,12 @@ export async function GET(req: NextRequest) {
       t.imported_at ? new Date(t.imported_at).toISOString() : '',
     ].join(',')),
   ]
+
+  // Bulk PII export — always audited regardless of row count
+  await logAudit(admin.id, 'export_tickets_csv', undefined, undefined, {
+    filters: { q, category, source, status },
+    row_count: enriched.length,
+  })
 
   return new NextResponse(rows.join('\n'), {
     headers: {
