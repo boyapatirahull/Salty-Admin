@@ -13,7 +13,7 @@ interface DataPoint {
 export function TicketActivityChart({ data }: { data: DataPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={160}>
-      <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barGap={3}>
+      <BarChart id="ticket-activity-chart" data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barGap={3}>
         <CartesianGrid strokeDasharray="3 3" stroke="#E5E0D8" vertical={false} />
         <XAxis
           dataKey="month"
@@ -42,8 +42,8 @@ export function TicketActivityChart({ data }: { data: DataPoint[] }) {
           iconSize={8}
           wrapperStyle={{ fontSize: 12, fontFamily: 'DM Sans, sans-serif', paddingTop: 12 }}
         />
-        <Bar dataKey="tickets" name="Tickets added" fill="#E8581A" radius={[4, 4, 0, 0]} maxBarSize={24} />
-        <Bar dataKey="imports" name="Gmail imports" fill="#C8A96E" radius={[4, 4, 0, 0]} maxBarSize={24} opacity={0.75} />
+        <Bar dataKey="tickets" name="Tickets added" fill="#E8581A" radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} />
+        <Bar dataKey="imports" name="Gmail imports" fill="#C8A96E" radius={[4, 4, 0, 0]} maxBarSize={24} opacity={0.75} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer>
   )

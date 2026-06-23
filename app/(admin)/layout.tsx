@@ -13,17 +13,33 @@ async function getLayoutCounts() {
     { count: tickets },
     { count: pendingImports },
     { count: unreadFeedback },
+    { data: openConvos },
   ] = await Promise.all([
     db.from('users').select('*', { count: 'exact', head: true }),
     db.from('tickets').select('*', { count: 'exact', head: true }),
     db.from('pending_imports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     db.from('feedback').select('*', { count: 'exact', head: true }).eq('status', 'unread'),
+    db.from('support_conversations').select('id').eq('status', 'open'),
   ])
+
+  const openIds = (openConvos ?? []).map((c) => c.id)
+  let openSupportChats = 0
+  if (openIds.length > 0) {
+    const { data: unreadMsgs } = await db
+      .from('support_conversation_messages')
+      .select('conversation_id')
+      .eq('sender_type', 'user')
+      .is('read_at', null)
+      .in('conversation_id', openIds)
+    openSupportChats = new Set((unreadMsgs ?? []).map((m) => m.conversation_id)).size
+  }
+
   return {
     users: users ?? 0,
     tickets: tickets ?? 0,
     pendingImports: pendingImports ?? 0,
     unreadFeedback: unreadFeedback ?? 0,
+    openSupportChats,
   }
 }
 

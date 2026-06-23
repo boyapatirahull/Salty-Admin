@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { PieChart, Pie, Cell, Tooltip } from 'recharts'
 
 interface DataPoint {
@@ -18,31 +19,40 @@ const COLORS: Record<string, string> = {
 }
 
 export function CategoryDonutChart({ data }: { data: DataPoint[] }) {
+  // recharts renders raw SVG with internal ids/animation that don't match between the server
+  // and the client's first paint. Render the chart only after mount so the server emits just
+  // the sized placeholder — eliminates the hydration mismatch entirely.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   const total = data.reduce((s, d) => s + d.value, 0)
   const top = data[0]
 
   return (
     <div className="flex items-center gap-5 px-5 py-5">
       <div className="relative shrink-0" style={{ width: 110, height: 110 }}>
-        <PieChart width={110} height={110}>
-          <Pie
-            data={data}
-            cx={55}
-            cy={55}
-            innerRadius={36}
-            outerRadius={50}
-            dataKey="value"
-            strokeWidth={0}
-          >
-            {data.map((entry) => (
-              <Cell key={entry.name} fill={COLORS[entry.name.toLowerCase()] ?? '#EAE6DE'} />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={{ fontSize: 12, fontFamily: 'DM Sans', border: '1px solid #E5E0D8', borderRadius: 8 }}
-            formatter={(v: number) => [`${v} tickets`, '']}
-          />
-        </PieChart>
+        {mounted && (
+          <PieChart id="category-donut-chart" width={110} height={110}>
+            <Pie
+              data={data}
+              cx={55}
+              cy={55}
+              innerRadius={36}
+              outerRadius={50}
+              dataKey="value"
+              strokeWidth={0}
+              isAnimationActive={false}
+            >
+              {data.map((entry) => (
+                <Cell key={entry.name} fill={COLORS[entry.name.toLowerCase()] ?? '#EAE6DE'} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{ fontSize: 12, fontFamily: 'DM Sans', border: '1px solid #E5E0D8', borderRadius: 8 }}
+              formatter={(v: number) => [`${v} tickets`, '']}
+            />
+          </PieChart>
+        )}
         {/* Centre label */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span className="font-sora text-[18px] font-bold text-salty-text leading-none">

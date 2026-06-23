@@ -12,7 +12,7 @@ const COLORS = ['#4f6cf2', '#a25cf2', '#E8581A', '#FAC775', '#A8E6D3', '#C8B8FF'
 export function TicketSourceChart({ data }: { data: DataPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <PieChart>
+      <PieChart id="ticket-source-chart">
         <Pie
           data={data}
           dataKey="count"
@@ -24,6 +24,7 @@ export function TicketSourceChart({ data }: { data: DataPoint[] }) {
             `${source} ${(percent * 100).toFixed(0)}%`
           }
           labelLine={false}
+          isAnimationActive={false}
         >
           {data.map((_, i) => (
             <Cell key={i} fill={COLORS[i % COLORS.length]} />

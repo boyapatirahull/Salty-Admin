@@ -10,7 +10,7 @@ interface DataPoint {
 export function NewUsersChart({ data }: { data: DataPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={data} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+      <BarChart id="new-users-chart" data={data} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis
           dataKey="day"
@@ -28,7 +28,7 @@ export function NewUsersChart({ data }: { data: DataPoint[] }) {
           labelFormatter={(v: string) => new Date(v).toLocaleDateString()}
           formatter={(v: number) => [v, 'New users']}
         />
-        <Bar dataKey="count" fill="hsl(240 5.9% 10%)" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="count" fill="hsl(240 5.9% 10%)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer>
   )

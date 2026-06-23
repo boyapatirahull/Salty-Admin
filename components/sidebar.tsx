@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, BarChart3, Users, Ticket, Mail,
   Calendar, Database, Send, Bell, Settings,
-  ChevronRight, LogOut, Wifi, Activity, ShieldAlert,
+  ChevronRight, LogOut, Wifi, Activity, ShieldAlert, MessageSquare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAdmin } from './admin-provider'
@@ -30,6 +30,7 @@ interface SidebarProps {
     users?: number
     tickets?: number
     pendingImports?: number
+    openSupportChats?: number
   }
 }
 
@@ -52,6 +53,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/moderation',        label: 'Moderation',       icon: ShieldAlert, maxLevel: 3 },
       { href: '/feedback',          label: 'Feedback',         icon: Calendar, maxLevel: 3 },
       { href: '/notifications',     label: 'Notifications',    icon: Bell,     maxLevel: 3 },
+      //{ href: '/support-chat',      label: 'Support Chat',     icon: MessageSquare, maxLevel: 3, countVariant: 'ember' },
     ],
   },
   {
@@ -68,6 +70,7 @@ function getCountForHref(href: string, counts: SidebarProps['counts']) {
   if (href === '/users')           return counts.users
   if (href === '/tickets')         return counts.tickets
   if (href === '/pending-imports') return counts.pendingImports
+  if (href === '/support-chat')    return counts.openSupportChats
   return undefined
 }
 
