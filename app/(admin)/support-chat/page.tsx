@@ -100,5 +100,7 @@ export default async function SupportChatPage() {
     </div>
   )
 
-  return locked ? <UnfinishedOverlay>{content}</UnfinishedOverlay> : content
+  return locked
+    ? <UnfinishedOverlay title="Feature for future" message="Built but locked for now.">{content}</UnfinishedOverlay>
+    : content
 }

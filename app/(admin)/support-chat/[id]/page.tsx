@@ -68,5 +68,7 @@ export default async function SupportChatThreadPage({ params }: PageProps) {
     </div>
   )
 
-  return locked ? <UnfinishedOverlay>{content}</UnfinishedOverlay> : content
+  return locked
+    ? <UnfinishedOverlay title="Feature for future" message="Built but locked for now.">{content}</UnfinishedOverlay>
+    : content
 }

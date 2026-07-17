@@ -13,10 +13,12 @@ import { Construction } from 'lucide-react'
  */
 export function UnfinishedOverlay({
   children,
+  title,
   message,
   compact = false,
 }: {
   children: React.ReactNode
+  title?: string
   message?: string
   compact?: boolean
 }) {
@@ -25,7 +27,7 @@ export function UnfinishedOverlay({
       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-ember-light">
         <Construction className="h-5 w-5 text-ember" />
       </div>
-      <p className="mt-3 font-sora text-[15px] font-bold text-salty-text">Not ready yet</p>
+      <p className="mt-3 font-sora text-[15px] font-bold text-salty-text">{title ?? 'Not ready yet'}</p>
       <p className="mt-1.5 text-[13px] leading-relaxed text-salty-muted">
         {message ?? "This page isn't completely built yet. Check back later."}
       </p>
