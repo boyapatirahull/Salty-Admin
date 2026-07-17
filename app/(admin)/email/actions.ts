@@ -55,11 +55,7 @@ export async function sendSingleEmailAction(
   subjectRaw: string,
   bodyRaw: string,
 ): Promise<{ ok: true }> {
-  // Super-Admin-only while this page is unfinished — must match the page gate,
-  // otherwise hiding the UI does nothing: server actions are callable endpoints.
-  // (The per-user dialog on a user's profile is a separate, live surface and
-  // still runs at level 2 via sendUserEmailAction in users/actions.ts.)
-  const admin = await requireAdmin(1)
+  const admin = await requireAdmin(2)
   const uid = assertUUID(userId, 'User ID')
   const subject = assertString(subjectRaw, 'Subject', 200)
   const body = assertString(bodyRaw, 'Body', 20_000)
@@ -96,7 +92,7 @@ export async function sendSingleEmailAction(
 
 /** Live recipient count for the composer preview. */
 export async function countRecipientsAction(segment: Segment): Promise<number> {
-  await requireAdmin(1)
+  await requireAdmin(2)
   const recipients = await resolveRecipients(segment)
   return recipients.length
 }
@@ -106,7 +102,7 @@ export async function sendBroadcastAction(
   bodyRaw: string,
   segment: Segment,
 ): Promise<{ sent: number; failed: number; recipients: number }> {
-  const admin = await requireAdmin(1)
+  const admin = await requireAdmin(2)
   const subject = assertString(subjectRaw, 'Subject', 200)
   const body = assertString(bodyRaw, 'Body', 20_000)
   assertEnum(segment.type, ['all', 'tier', 'active'] as const, 'Segment')

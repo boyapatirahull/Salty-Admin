@@ -1,6 +1,5 @@
 import { requireAdmin } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
-import { UnfinishedOverlay } from '@/components/unfinished-overlay'
 import { EmailComposer } from './email-composer'
 
 interface Campaign {
@@ -25,15 +24,7 @@ function segmentLabel(seg: Campaign['segment'], userEmailById: Map<string, strin
 }
 
 export default async function EmailPage() {
-  const admin = await requireAdmin(2)
-
-  // Sending to real users is Super-Admin-only until this is finished; everyone
-  // else sees the page behind a "not ready" veil. The three actions in
-  // ./actions.ts enforce level 1 — that is the real gate, not this.
-  // Only level <= 2 reaches this page at all, and they can already see user
-  // emails on /users, so rendering the composer behind the veil leaks nothing new.
-  const locked = admin.access_level !== 1
-
+  await requireAdmin(2)
   const db = createServiceClient()
 
   const [{ data: users }, { data }] = await Promise.all([
@@ -59,7 +50,7 @@ export default async function EmailPage() {
     }
   }
 
-  const content = (
+  return (
     <div className="p-7 space-y-7">
       <div>
         <h1 className="font-sora text-[20px] font-bold text-salty-text">Email Users</h1>
@@ -100,6 +91,4 @@ export default async function EmailPage() {
       </div>
     </div>
   )
-
-  return locked ? <UnfinishedOverlay>{content}</UnfinishedOverlay> : content
 }

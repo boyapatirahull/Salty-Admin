@@ -124,10 +124,7 @@ export async function sendNotificationAction(userId: string, title: string, body
 }
 
 export async function sendUserEmailAction(userId: string, subject: string, body: string) {
-  // Super-Admin-only while the email feature is unfinished — matches the Email
-  // Users page and the veiled dialog on the profile. Server actions are callable
-  // endpoints, so this is what actually prevents a send, not the dialog's veil.
-  const admin = await requireAdmin(1)
+  const admin = await requireAdmin(2)
   const uid   = assertUUID(userId, 'User ID')
   const s     = assertString(subject, 'Subject', 200)
   const b     = assertString(body, 'Body', 20_000)

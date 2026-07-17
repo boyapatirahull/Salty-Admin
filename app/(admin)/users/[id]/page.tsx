@@ -74,8 +74,6 @@ export default async function UserDetailPage({ params }: PageProps) {
   const canManageAuth = (admin?.access_level ?? 5) <= 2
   const canBan = (admin?.access_level ?? 5) <= 2
   const showFullPii = (admin?.access_level ?? 5) <= 2
-  // Emailing users is unfinished — non-Super-Admins get the dialog veiled.
-  const emailLocked = (admin?.access_level ?? 5) !== 1
 
   const isBanned = user.banned_until !== null && new Date(user.banned_until) > new Date()
   const isPermBan = isBanned && user.banned_until && new Date(user.banned_until).getFullYear() >= 2099
@@ -159,7 +157,7 @@ export default async function UserDetailPage({ params }: PageProps) {
       {(canNotify || canDelete || canManageAuth) && (
         <div className="flex gap-2 flex-wrap">
           {canNotify && <SendNotificationDialog userId={id} />}
-          {canManageAuth && <SendEmailDialog userId={id} userEmail={displayEmail} locked={emailLocked} />}
+          {canManageAuth && <SendEmailDialog userId={id} userEmail={displayEmail} />}
           {canManageAuth && <ResetPasswordButton userId={id} userEmail={user.email} />}
           {canManageAuth && <ForceSignOutButton userId={id} userEmail={user.email} />}
           {canBan && <BanUserDialog userId={id} userEmail={user.email} bannedUntil={user.banned_until ?? null} />}

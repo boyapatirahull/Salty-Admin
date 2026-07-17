@@ -9,18 +9,14 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from '@/components/ui/dialog'
-import { UnfinishedOverlay } from '@/components/unfinished-overlay'
 import { sendUserEmailAction } from '../actions'
 
 export function SendEmailDialog({
   userId,
   userEmail,
-  locked = false,
 }: {
   userId: string
   userEmail: string
-  /** Veil the compose form — emailing users isn't finished for non-Super-Admins. */
-  locked?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [subject, setSubject] = useState('')
@@ -48,30 +44,6 @@ export function SendEmailDialog({
     })
   }
 
-  const form = (
-    <>
-      <div className="space-y-3 py-2">
-        <div className="space-y-1.5">
-          <Label>Subject</Label>
-          <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Message</Label>
-          <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your message…" rows={6} />
-        </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {sent && <p className="text-sm text-[#3E8A5A]">Email sent.</p>}
-      </div>
-      <DialogFooter>
-        <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
-        <Button onClick={handleSend} disabled={pending}>
-          {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {pending ? 'Sending…' : 'Send'}
-        </Button>
-      </DialogFooter>
-    </>
-  )
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -84,13 +56,25 @@ export function SendEmailDialog({
         <DialogHeader>
           <DialogTitle>Email {userEmail}</DialogTitle>
         </DialogHeader>
-        {locked ? (
-          <UnfinishedOverlay compact message="Emailing users isn't completely built yet. Check back later.">
-            {form}
-          </UnfinishedOverlay>
-        ) : (
-          form
-        )}
+        <div className="space-y-3 py-2">
+          <div className="space-y-1.5">
+            <Label>Subject</Label>
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Message</Label>
+            <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your message…" rows={6} />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {sent && <p className="text-sm text-[#3E8A5A]">Email sent.</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
+          <Button onClick={handleSend} disabled={pending}>
+            {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {pending ? 'Sending…' : 'Send'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
