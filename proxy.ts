@@ -33,7 +33,10 @@ export async function proxy(request: NextRequest) {
   // page is bearer-token-authenticated by its own server action, so the middleware
   // must let anonymous requests through — otherwise every invite link redirects
   // to /login and the token is never seen.
-  const isPublicPath = pathname === '/login' || pathname.startsWith('/accept-invite')
+  const isPublicPath =
+    pathname === '/login' ||
+    pathname.startsWith('/accept-invite') ||
+    pathname.startsWith('/unsubscribe')
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone()

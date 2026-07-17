@@ -4,6 +4,8 @@ import { requireAdmin, logAudit } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { assertUUID, assertString, assertEnum } from '@/lib/validate'
 import { sendBulkEmail, sendEmail } from '@/lib/email'
+import { renderBroadcastEmail } from '@/lib/emails/broadcast'
+import { unsubscribeUrl } from '@/lib/unsubscribe'
 
 export type SegmentType = 'all' | 'tier' | 'active'
 export interface Segment {
@@ -14,10 +16,10 @@ export interface Segment {
 
 const VALID_TIERS = ['free', 'premium', 'family'] as const
 
-/** Resolve the list of recipient emails for a segment, excluding banned users. */
-async function resolveRecipients(segment: Segment): Promise<string[]> {
+/** Resolve the list of recipient emails for a segment, excluding banned and unsubscribed users. */
+async function resolveRecipients(segment: Segment): Promise<Array<{ id: string; email: string }>> {
   const db = createServiceClient()
-  let query = db.from('users').select('email, banned_until')
+  let query = db.from('users').select('id, email, banned_until, unsubscribed_from_marketing')
 
   if (segment.type === 'tier' && segment.tier) {
     query = query.eq('tier', assertEnum(segment.tier, VALID_TIERS, 'Tier'))
@@ -29,12 +31,22 @@ async function resolveRecipients(segment: Segment): Promise<string[]> {
 
   const { data } = await query
   const now = Date.now()
-  const emails = (data ?? [])
-    .filter(u => !u.banned_until || new Date(u.banned_until).getTime() <= now)
-    .map(u => u.email)
-    .filter((e): e is string => typeof e === 'string' && e.includes('@'))
+  const recipients: Array<{ id: string; email: string }> = []
+  for (const user of data ?? []) {
+    if (user.banned_until && new Date(user.banned_until).getTime() > now) continue
+    if (user.unsubscribed_from_marketing === true) continue
+    if (typeof user.id !== 'string') continue
+    if (typeof user.email !== 'string' || !user.email.includes('@')) continue
+    recipients.push({ id: user.id, email: user.email })
+  }
 
-  return [...new Set(emails.map(e => e.trim().toLowerCase()))]
+  const byEmail = new Map<string, { id: string; email: string }>()
+  for (const recipient of recipients) {
+    const email = recipient.email.trim().toLowerCase()
+    if (!byEmail.has(email)) byEmail.set(email, { id: recipient.id, email })
+  }
+
+  return [...byEmail.values()]
 }
 
 /** Send a one-off email to a single user (by id) from the Email Users page. */
@@ -82,7 +94,16 @@ export async function sendBroadcastAction(
   const recipients = await resolveRecipients(segment)
   if (recipients.length === 0) throw new Error('No recipients match this segment.')
 
-  const { sent, failed } = await sendBulkEmail(recipients, subject, body)
+  const messages = recipients.map(recipient => {
+    const rendered = renderBroadcastEmail({
+      subject,
+      body,
+      unsubscribeUrl: unsubscribeUrl(recipient.id),
+    })
+    return { to: recipient.email, subject: rendered.subject, html: rendered.html }
+  })
+
+  const { sent, failed } = await sendBulkEmail(messages)
 
   // Log the campaign — tolerate the table not existing yet (migration 007 not applied).
   const db = createServiceClient()

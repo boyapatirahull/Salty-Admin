@@ -70,25 +70,22 @@ export interface BulkResult {
 }
 
 /**
- * Send the same email to many recipients. Uses Resend's batch endpoint
+ * Send rendered emails to many recipients. Uses Resend's batch endpoint
  * (max 100 messages per call) and returns aggregate sent/failed counts.
  * One address per message so recipients never see each other.
  */
 export async function sendBulkEmail(
-  recipients: string[],
-  subject: string,
-  body: string,
+  messages: Array<{ to: string; subject: string; html: string }>,
 ): Promise<BulkResult> {
   const resend = getClient()
-  const html = textToHtml(subject, body)
   let sent = 0
   let failed = 0
 
-  for (let i = 0; i < recipients.length; i += 100) {
-    const chunk = recipients.slice(i, i + 100)
+  for (let i = 0; i < messages.length; i += 100) {
+    const chunk = messages.slice(i, i + 100)
     try {
       const { data, error } = await resend.batch.send(
-        chunk.map(to => ({ from: FROM, to, subject, html })),
+        chunk.map(message => ({ from: FROM, ...message })),
       )
       if (error) {
         failed += chunk.length
