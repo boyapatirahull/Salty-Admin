@@ -5,6 +5,8 @@ import bcrypt from 'bcryptjs'
 import { requireAdmin, logAudit } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { assertUUID, assertEmail, assertString, assertAccessLevel } from '@/lib/validate'
+import { sendEmail } from '@/lib/email'
+import { generateInviteToken, inviteExpiryFromNow, acceptInviteUrl } from '@/lib/invite'
 
 export async function inviteAdminAction(email: string, fullName: string, accessLevel: number) {
   const admin = await requireAdmin(1)
@@ -21,8 +23,12 @@ export async function inviteAdminAction(email: string, fullName: string, accessL
   const { data: existing } = await db.from('admin_users').select('id').eq('email', e).single()
   if (existing) throw new Error('An admin with this email already exists.')
 
+  const { raw, hash } = generateInviteToken()
+  const inviteUrl = acceptInviteUrl(raw)
+  const expiresAt = inviteExpiryFromNow()
+
   // Create Supabase auth user (auto-confirmed so they can log in after setting password)
-  const { data: authUser, error: authErr } = await db.auth.admin.createUser({
+  const { error: authErr } = await db.auth.admin.createUser({
     email: e,
     email_confirm: true,
     user_metadata: {
@@ -42,15 +48,31 @@ export async function inviteAdminAction(email: string, fullName: string, accessL
     access_level: lvl,
     invited_by: admin.id,
     is_active: true,
+    invite_token_hash: hash,
+    invite_token_expires_at: expiresAt,
   })
   if (insertErr) throw new Error(insertErr.message)
 
-  // Send password recovery email so the new admin sets their own password
-  if (authUser?.user) {
-    await db.auth.admin.generateLink({ type: 'recovery', email: e })
+  const subject = "You're invited to Salty Admin"
+  const body = [
+    `Hi ${n},`,
+    '',
+    'A Super Admin invited you to Salty Admin.',
+    '',
+    inviteUrl,
+    '',
+    'This link expires in 48 hours.',
+    "If you weren't expecting this invite, you can ignore this email.",
+  ].join('\n')
+
+  try {
+    await sendEmail(e, subject, body)
+  } catch (error) {
+    revalidatePath('/settings/admin-users')
+    throw error
   }
 
-  await logAudit(admin.id, 'invite_admin', 'admin_user', undefined, { access_level: lvl })
+  await logAudit(admin.id, 'invite_admin', 'admin_user', undefined, { access_level: lvl, emailed: true })
   revalidatePath('/settings/admin-users')
   return { ok: true }
 }
