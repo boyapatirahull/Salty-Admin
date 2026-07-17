@@ -3,8 +3,8 @@
 import { requireAdmin, logAudit } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { assertUUID, assertString, assertEnum } from '@/lib/validate'
-import { sendBulkEmail, sendEmail } from '@/lib/email'
-import { renderBroadcastEmail } from '@/lib/emails/broadcast'
+import { sendBulkEmail, sendHtmlEmail } from '@/lib/email'
+import { renderBrandedEmail } from '@/lib/emails/branded'
 import { unsubscribeUrl } from '@/lib/unsubscribe'
 
 export type SegmentType = 'all' | 'tier' | 'active'
@@ -69,7 +69,12 @@ export async function sendSingleEmailAction(
   if (!user) throw new Error('User not found.')
   if (!user.email) throw new Error('This user has no email address.')
 
-  await sendEmail(user.email, subject, body)
+  const { subject: subj, html } = renderBrandedEmail({
+    subject,
+    body,
+    pillLabel: 'MESSAGE',
+  })
+  await sendHtmlEmail(user.email, subj, html)
   await logAudit(admin.id, 'send_user_email', 'user', uid, { subject })
   return { ok: true }
 }
@@ -95,9 +100,10 @@ export async function sendBroadcastAction(
   if (recipients.length === 0) throw new Error('No recipients match this segment.')
 
   const messages = recipients.map(recipient => {
-    const rendered = renderBroadcastEmail({
+    const rendered = renderBrandedEmail({
       subject,
       body,
+      pillLabel: 'PRODUCT UPDATE',
       unsubscribeUrl: unsubscribeUrl(recipient.id),
     })
     return { to: recipient.email, subject: rendered.subject, html: rendered.html }

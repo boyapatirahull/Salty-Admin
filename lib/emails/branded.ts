@@ -7,16 +7,18 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
-export function renderBroadcastEmail(input: {
+export function renderBrandedEmail(input: {
   subject: string
   body: string
-  unsubscribeUrl: string
+  pillLabel: string
+  unsubscribeUrl?: string
 }): { subject: string; html: string } {
-  if (input.unsubscribeUrl.includes('"')) {
+  if (input.unsubscribeUrl?.includes('"')) {
     throw new Error('Unsubscribe URL cannot contain double quotes.')
   }
 
   const subject = escapeHtml(input.subject)
+  const pillLabel = escapeHtml(input.pillLabel)
   const bodyHtml = escapeHtml(input.body)
     .split(/\n{2,}/)
     .map(
@@ -24,7 +26,9 @@ export function renderBroadcastEmail(input: {
         `<p style="margin:0 0 14px 0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:16px; line-height:25px; color:#1a1530;">${paragraph.replace(/\n/g, '<br/>')}</p>`,
     )
     .join('')
-  const { unsubscribeUrl } = input
+  const footerContact = input.unsubscribeUrl
+    ? `<a href="${input.unsubscribeUrl}" style="color:#FAC775; text-decoration:underline;">Unsubscribe</a> &middot; <a href="mailto:support@saltydigital.ai" style="color:#FAC775; text-decoration:underline;">support@saltydigital.ai</a>`
+    : `<a href="mailto:support@saltydigital.ai" style="color:#FAC775; text-decoration:underline;">support@saltydigital.ai</a>`
 
   const html = `<!doctype html>
 <html>
@@ -50,7 +54,7 @@ export function renderBroadcastEmail(input: {
         </table>
         <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin-top:16px;">
           <tr>
-            <td bgcolor="#7854DC" style="background-color:#7854DC; border-radius:999px; padding:7px 15px; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; font-weight:700; color:#ffffff; letter-spacing:1.4px;">PRODUCT UPDATE</td>
+            <td bgcolor="#7854DC" style="background-color:#7854DC; border-radius:999px; padding:7px 15px; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; font-weight:700; color:#ffffff; letter-spacing:1.4px;">${pillLabel}</td>
           </tr>
         </table>
       </td>
@@ -85,7 +89,7 @@ export function renderBroadcastEmail(input: {
             <td style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:14px; line-height:21px; color:#B9B2D6; padding-bottom:14px;">You're receiving this because you have a Salty account.</td>
           </tr>
           <tr>
-            <td style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; line-height:21px; color:#B9B2D6;"><a href="${unsubscribeUrl}" style="color:#FAC775; text-decoration:underline;">Unsubscribe</a> &middot; <a href="mailto:support@saltydigital.ai" style="color:#FAC775; text-decoration:underline;">support@saltydigital.ai</a><br><span style="color:#8E86AD;">Salty Digital, Delaware, USA &middot; &copy; 2026 Salty Digital. All rights reserved.</span></td>
+            <td style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; line-height:21px; color:#B9B2D6;">${footerContact}<br><span style="color:#8E86AD;">Salty Digital, Delaware, USA &middot; &copy; 2026 Salty Digital. All rights reserved.</span></td>
           </tr>
         </table>
       </td>

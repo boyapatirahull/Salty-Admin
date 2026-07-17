@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin, logAudit } from '@/lib/auth'
 import { createAuthClient, createServiceClient } from '@/lib/supabase/server'
 import { assertUUID, assertString, assertEnum } from '@/lib/validate'
-import { sendEmail } from '@/lib/email'
+import { sendHtmlEmail } from '@/lib/email'
+import { renderBrandedEmail } from '@/lib/emails/branded'
 
 const VALID_TIERS = ['free', 'premium', 'family'] as const
 
@@ -136,7 +137,12 @@ export async function sendUserEmailAction(userId: string, subject: string, body:
   if (!user) throw new Error('User not found.')
   if (!user.email) throw new Error('This user has no email address.')
 
-  await sendEmail(user.email, s, b)
+  const { subject: subj, html } = renderBrandedEmail({
+    subject: s,
+    body: b,
+    pillLabel: 'MESSAGE',
+  })
+  await sendHtmlEmail(user.email, subj, html)
   await logAudit(admin.id, 'send_user_email', 'user', uid, { subject: s })
   return { ok: true }
 }
