@@ -29,12 +29,14 @@ export default async function NotificationsPage({ searchParams }: PageProps) {
 
   // Log query respects the filter tab. All other queries stay unfiltered — they
   // power the aggregate reach/opt-in panels which are per-project, not per-source.
-  const logQuery = db
+  // Supabase's query builder returns a NEW builder from each method — chaining
+  // without reassignment silently drops the filter.
+  let logQuery = db
     .from('notifications')
     .select('id, user_id, title, body, read, source, created_at')
     .order('created_at', { ascending: false })
     .limit(50)
-  if (filter !== 'all') logQuery.eq('source', filter)
+  if (filter !== 'all') logQuery = logQuery.eq('source', filter) as typeof logQuery
 
   const [
     { data: users },
