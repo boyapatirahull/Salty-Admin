@@ -29,7 +29,13 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  if (!user && pathname !== '/login') {
+  // Paths that must render for a NOT-logged-in visitor. The invite acceptance
+  // page is bearer-token-authenticated by its own server action, so the middleware
+  // must let anonymous requests through — otherwise every invite link redirects
+  // to /login and the token is never seen.
+  const isPublicPath = pathname === '/login' || pathname.startsWith('/accept-invite')
+
+  if (!user && !isPublicPath) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
