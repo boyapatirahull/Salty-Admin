@@ -12,7 +12,7 @@ async function callNotifFn(userId: string, title: string, body: string) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
     },
-    body: JSON.stringify({ userId, title, body }),
+    body: JSON.stringify({ userId, title, body, source: 'admin' }),
   })
   if (!res.ok) throw new Error(`Notification delivery failed for user ${userId.slice(0, 8)}.`)
 }

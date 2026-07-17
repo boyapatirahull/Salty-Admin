@@ -1,6 +1,14 @@
+import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { NotifComposer } from './notif-composer'
+
+interface PageProps {
+  searchParams: Promise<{ source?: string }>
+}
+
+const VALID_SOURCES = ['admin', 'system'] as const
+type SourceFilter = (typeof VALID_SOURCES)[number] | 'all'
 
 const PREF_TOGGLES: [string, string][] = [
   ['event_reminders', 'Event reminders'],
@@ -11,9 +19,22 @@ const PREF_TOGGLES: [string, string][] = [
   ['artist_alerts', 'Artist alerts'],
 ]
 
-export default async function NotificationsPage() {
+export default async function NotificationsPage({ searchParams }: PageProps) {
   await requireAdmin(3)
+  const { source: sourceParam } = await searchParams
+  const filter: SourceFilter = (VALID_SOURCES as readonly string[]).includes(sourceParam ?? '')
+    ? (sourceParam as SourceFilter)
+    : 'all'
   const db = createServiceClient()
+
+  // Log query respects the filter tab. All other queries stay unfiltered — they
+  // power the aggregate reach/opt-in panels which are per-project, not per-source.
+  const logQuery = db
+    .from('notifications')
+    .select('id, user_id, title, body, read, source, created_at')
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (filter !== 'all') logQuery.eq('source', filter)
 
   const [
     { data: users },
@@ -23,10 +44,7 @@ export default async function NotificationsPage() {
     { data: prefs },
   ] = await Promise.all([
     db.from('users').select('id, email').order('email').limit(500),
-    db.from('notifications')
-      .select('id, user_id, title, body, read, created_at')
-      .order('created_at', { ascending: false })
-      .limit(50),
+    logQuery,
     db.from('users').select('*', { count: 'exact', head: true }),
     db.from('notification_tokens').select('user_id, platform'),
     db.from('notification_preferences').select('*'),
@@ -102,25 +120,57 @@ export default async function NotificationsPage() {
 
       {/* Log */}
       <div>
-        <h2 className="font-sora text-[15px] font-bold text-salty-text mb-3">Recent Notification Log</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-sora text-[15px] font-bold text-salty-text">Recent Notifications</h2>
+          <div className="flex gap-1 rounded-lg bg-stone p-1">
+            {([
+              { key: 'all',    label: 'All' },
+              { key: 'admin',  label: 'Admin' },
+              { key: 'system', label: 'System' },
+            ] as const).map(t => {
+              const href = t.key === 'all' ? '/notifications' : `/notifications?source=${t.key}`
+              const active = filter === t.key
+              return (
+                <Link
+                  key={t.key}
+                  href={href}
+                  className={`rounded-md px-3 py-1 text-[12px] font-medium transition-colors ${
+                    active ? 'bg-warm-white text-salty-text shadow-sm' : 'text-salty-secondary hover:text-salty-text'
+                  }`}
+                >
+                  {t.label}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
         <div className="overflow-hidden rounded-[14px] border border-salty-border bg-warm-white">
           <table className="w-full">
             <thead>
               <tr className="border-b border-salty-border bg-cream">
-                {['Title','Body','User','Read','Sent'].map(h => (
+                {['Title','Body','User','Source','Read','Sent'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-salty-muted">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {(log ?? []).length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-[13px] text-salty-muted">No notifications sent yet</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-[13px] text-salty-muted">
+                  {filter === 'all' ? 'No notifications sent yet' : `No ${filter} notifications`}
+                </td></tr>
               ) : (
                 (log ?? []).map(n => (
                   <tr key={n.id} className="border-b border-salty-border last:border-0 hover:bg-cream">
                     <td className="px-4 py-3 text-[13px] font-medium text-salty-text">{n.title}</td>
                     <td className="px-4 py-3 text-[12px] text-salty-secondary max-w-xs"><p className="truncate">{n.body}</p></td>
                     <td className="px-4 py-3 text-[12px] text-salty-secondary">{emailMap[n.user_id] ?? n.user_id?.slice(0,8)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                        n.source === 'admin' ? 'bg-ember-light text-ember' : 'bg-stone text-salty-muted'
+                      }`}>
+                        {n.source ?? 'system'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${n.read ? 'bg-stone text-salty-muted' : 'bg-ember-light text-ember'}`}>
                         {n.read ? 'Read' : 'Unread'}

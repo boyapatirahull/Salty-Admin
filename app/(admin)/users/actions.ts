@@ -115,7 +115,7 @@ export async function sendNotificationAction(userId: string, title: string, body
   const res = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
-    body: JSON.stringify({ userId: uid, title: t, body: b }),
+    body: JSON.stringify({ userId: uid, title: t, body: b, source: 'admin' }),
   })
   if (!res.ok) throw new Error('Failed to send notification.')
 
