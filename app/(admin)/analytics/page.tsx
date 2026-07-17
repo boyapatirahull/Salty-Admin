@@ -337,7 +337,7 @@ export default async function AnalyticsPage() {
         </Panel>
       </div>
 
-      {/* Tiers + Content moderation + Admin activity */}
+      {/* Tiers + Photos + Admin activity */}
       <div className="grid gap-5 lg:grid-cols-3">
         <Panel title="User Tiers" action={{ label: 'View users', href: '/users' }}>
           <StatRow label="Free" value={tierMap.free} sub={totalUsers ? `${Math.round(tierMap.free / totalUsers * 100)}%` : undefined} />
@@ -345,7 +345,7 @@ export default async function AnalyticsPage() {
           <StatRow label="Family" value={tierMap.family} sub={totalUsers ? `${Math.round(tierMap.family / totalUsers * 100)}%` : undefined} />
         </Panel>
 
-        <Panel title="Content Moderation" action={{ label: 'Review', href: '/moderation' }}>
+        <Panel title="Photos" action={{ label: 'Review', href: '/photos' }}>
           <StatRow label="Photos" value={photoCount ?? 0} />
           <StatRow label="Ticket Notes" value={noteCount ?? 0} />
           <StatRow label="Ticket Tags" value={tagCount ?? 0} />

@@ -414,7 +414,7 @@ export default async function DashboardPage() {
         </Panel>
 
         {/* Platform health */}
-        <Panel title="Platform Health" action={{ label: 'Moderation', href: '/moderation' }}>
+        <Panel title="Platform Health" action={{ label: 'Photos', href: '/photos' }}>
           <HealthBar label="Email Adoption" pct={d.emailAdoption}
             color={d.emailAdoption >= 50 ? '#3E8A5A' : d.emailAdoption >= 25 ? '#C8A96E' : '#E8581A'} />
           <HealthBar label="Import Approval Rate" pct={d.approveRate}

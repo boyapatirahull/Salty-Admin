@@ -29,31 +29,5 @@ export async function deletePhotoAction(photoId: string) {
 
   await db.from('photos').delete().eq('id', pid)
   await logAudit(admin.id, 'delete_photo', 'photo', pid, { ticket_id: photo.ticket_id })
-  revalidatePath('/moderation')
-}
-
-export async function deleteNoteAction(noteId: string) {
-  const admin = await requireAdmin(3)
-  const nid   = assertUUID(noteId, 'Note ID')
-  const db    = createServiceClient()
-
-  const { data: note } = await db.from('ticket_notes').select('id, ticket_id').eq('id', nid).single()
-  if (!note) throw new Error('Note not found.')
-
-  await db.from('ticket_notes').delete().eq('id', nid)
-  await logAudit(admin.id, 'delete_ticket_note', 'ticket_note', nid, { ticket_id: note.ticket_id })
-  revalidatePath('/moderation')
-}
-
-export async function deleteTagAction(tagId: string) {
-  const admin = await requireAdmin(3)
-  const tid   = assertUUID(tagId, 'Tag ID')
-  const db    = createServiceClient()
-
-  const { data: tag } = await db.from('ticket_tags').select('id, ticket_id').eq('id', tid).single()
-  if (!tag) throw new Error('Tag not found.')
-
-  await db.from('ticket_tags').delete().eq('id', tid)
-  await logAudit(admin.id, 'delete_ticket_tag', 'ticket_tag', tid, { ticket_id: tag.ticket_id })
-  revalidatePath('/moderation')
+  revalidatePath('/photos')
 }
