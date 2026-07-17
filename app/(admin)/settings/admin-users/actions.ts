@@ -5,7 +5,8 @@ import bcrypt from 'bcryptjs'
 import { requireAdmin, logAudit } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { assertUUID, assertEmail, assertString, assertAccessLevel } from '@/lib/validate'
-import { sendEmail } from '@/lib/email'
+import { sendHtmlEmail } from '@/lib/email'
+import { renderAdminInviteEmail } from '@/lib/emails/admin-invite'
 import { generateInviteToken, inviteExpiryFromNow, acceptInviteUrl } from '@/lib/invite'
 
 export async function inviteAdminAction(email: string, fullName: string, accessLevel: number) {
@@ -53,20 +54,14 @@ export async function inviteAdminAction(email: string, fullName: string, accessL
   })
   if (insertErr) throw new Error(insertErr.message)
 
-  const subject = "You're invited to Salty Admin"
-  const body = [
-    `Hi ${n},`,
-    '',
-    'A Super Admin invited you to Salty Admin.',
-    '',
+  const { subject, html } = renderAdminInviteEmail({
+    fullName: n,
+    inviterName: admin.full_name ?? admin.email,
     inviteUrl,
-    '',
-    'This link expires in 48 hours.',
-    "If you weren't expecting this invite, you can ignore this email.",
-  ].join('\n')
+  })
 
   try {
-    await sendEmail(e, subject, body)
+    await sendHtmlEmail(e, subject, html)
   } catch (error) {
     revalidatePath('/settings/admin-users')
     throw error

@@ -52,6 +52,18 @@ export async function sendEmail(to: string, subject: string, body: string): Prom
   if (error) throw new Error(error.message)
 }
 
+/** Send a single HTML email. Throws on failure. */
+export async function sendHtmlEmail(to: string, subject: string, html: string): Promise<void> {
+  const resend = getClient()
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to,
+    subject,
+    html,
+  })
+  if (error) throw new Error(error.message)
+}
+
 export interface BulkResult {
   sent: number
   failed: number
