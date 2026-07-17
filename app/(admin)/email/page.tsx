@@ -6,15 +6,19 @@ import { EmailComposer } from './email-composer'
 interface Campaign {
   id: string
   subject: string
-  segment: { type?: string; tier?: string; activeDays?: number } | null
+  segment: { type?: string; tier?: string; activeDays?: number; user_id?: string } | null
   recipient_count: number
   sent_count: number
   failed_count: number
   created_at: string
 }
 
-function segmentLabel(seg: Campaign['segment']): string {
+function segmentLabel(seg: Campaign['segment'], userEmailById: Map<string, string>): string {
   if (!seg || !seg.type || seg.type === 'all') return 'All users'
+  if (seg.type === 'user' && seg.user_id) {
+    const email = userEmailById.get(seg.user_id)
+    return email ? `To ${email}` : 'To (deleted user)'
+  }
   if (seg.type === 'tier') return `Tier: ${seg.tier}`
   if (seg.type === 'active') return `Active ${seg.activeDays}d`
   return seg.type
@@ -41,6 +45,19 @@ export default async function EmailPage() {
       .limit(30),
   ])
   const campaigns: Campaign[] = data ? (data as Campaign[]) : []
+  const userIds = [...new Set(campaigns
+    .map(c => c.segment)
+    .filter((seg): seg is NonNullable<Campaign['segment']> => seg?.type === 'user' && !!seg.user_id)
+    .map(seg => seg.user_id))]
+  const userEmailById = new Map<string, string>()
+  if (userIds.length > 0) {
+    const { data: campaignUsers } = await db.from('users').select('id, email').in('id', userIds)
+    for (const user of campaignUsers ?? []) {
+      if (typeof user.id === 'string' && typeof user.email === 'string') {
+        userEmailById.set(user.id, user.email)
+      }
+    }
+  }
 
   const content = (
     <div className="p-7 space-y-7">
@@ -52,7 +69,7 @@ export default async function EmailPage() {
       <EmailComposer users={(users ?? []).filter(u => u.email)} />
 
       <div>
-        <h2 className="font-sora text-[15px] font-bold text-salty-text mb-3">Recent Campaigns</h2>
+        <h2 className="font-sora text-[15px] font-bold text-salty-text mb-3">Recent Emails</h2>
         <div className="overflow-hidden rounded-[14px] border border-salty-border bg-warm-white">
           <table className="w-full">
             <thead>
@@ -69,7 +86,7 @@ export default async function EmailPage() {
                 campaigns.map(c => (
                   <tr key={c.id} className="border-b border-salty-border last:border-0 hover:bg-cream">
                     <td className="px-4 py-3 text-[13px] font-medium text-salty-text max-w-xs"><p className="truncate">{c.subject}</p></td>
-                    <td className="px-4 py-3 text-[12px] text-salty-secondary">{segmentLabel(c.segment)}</td>
+                    <td className="px-4 py-3 text-[12px] text-salty-secondary">{segmentLabel(c.segment, userEmailById)}</td>
                     <td className="px-4 py-3 text-[13px] text-salty-text">{c.recipient_count}</td>
                     <td className="px-4 py-3 text-[13px] text-[#3E8A5A]">{c.sent_count}</td>
                     <td className="px-4 py-3 text-[13px]">{c.failed_count > 0 ? <span className="text-[#BF4A3A]">{c.failed_count}</span> : <span className="text-salty-muted">0</span>}</td>

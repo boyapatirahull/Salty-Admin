@@ -75,6 +75,21 @@ export async function sendSingleEmailAction(
     pillLabel: 'MESSAGE',
   })
   await sendHtmlEmail(user.email, subj, html)
+
+  try {
+    await db.from('email_campaigns').insert({
+      admin_id: admin.id,
+      subject,
+      body,
+      segment: { type: 'user', user_id: uid },
+      recipient_count: 1,
+      sent_count: 1,
+      failed_count: 0,
+    })
+  } catch {
+    // email_campaigns table not present — skip logging, the send already happened.
+  }
+
   await logAudit(admin.id, 'send_user_email', 'user', uid, { subject })
   return { ok: true }
 }
