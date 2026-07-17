@@ -40,7 +40,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Overview',
     items: [
       { href: '/',          label: 'Dashboard',  icon: LayoutDashboard, maxLevel: 4 },
-      { href: '/analytics', label: 'Analytics',  icon: BarChart3,       maxLevel: 1 },
+      { href: '/analytics', label: 'Analytics',  icon: BarChart3,       maxLevel: 3 },
     ],
   },
   {
