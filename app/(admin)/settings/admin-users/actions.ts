@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import bcrypt from 'bcryptjs'
 import { requireAdmin, logAudit } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { assertUUID, assertEmail, assertString, assertAccessLevel } from '@/lib/validate'
@@ -46,6 +47,47 @@ export async function inviteAdminAction(email: string, fullName: string, accessL
   }
 
   await logAudit(admin.id, 'invite_admin', 'admin_user', undefined, { access_level: lvl })
+  revalidatePath('/settings/admin-users')
+  return { ok: true }
+}
+
+/**
+ * Set another admin's admin-panel password (Super Admin only).
+ *
+ * This is the only way an admin gets a password now that loginAction no longer
+ * falls back to Supabase auth — the hash written here is the sole credential the
+ * admin panel accepts, and it is entirely separate from the app-user password in
+ * auth.users, so setting it here cannot affect anyone's mobile-app login.
+ */
+export async function setAdminPasswordAction(targetAdminId: string, newPassword: string) {
+  const admin = await requireAdmin(1)
+  const tid   = assertUUID(targetAdminId, 'Admin ID')
+  const pass  = assertString(newPassword, 'Password', 128)
+  if (pass.length < 8) throw new Error('Password must be at least 8 characters.')
+
+  // Own password goes through the profile page, which requires the current one —
+  // letting a Super Admin rotate their own password here would skip that check.
+  if (tid === admin.id) throw new Error('Use your profile page to change your own password.')
+
+  const db = createServiceClient()
+  const { data: target } = await db.from('admin_users').select('id, email').eq('id', tid).single()
+  if (!target) throw new Error('Admin not found.')
+
+  const hash = await bcrypt.hash(pass, 12)
+
+  const { error } = await db
+    .from('admin_users')
+    .update({
+      admin_password_hash: hash,
+      password_last_updated_at: new Date().toISOString(),
+      // A freshly-set password shouldn't land on an account still serving a lockout.
+      failed_login_attempts: 0,
+      locked_until: null,
+    })
+    .eq('id', tid)
+  if (error) throw new Error('Failed to set password.')
+
+  await logAudit(admin.id, 'set_admin_password', 'admin_user', tid, { email: target.email })
   revalidatePath('/settings/admin-users')
   return { ok: true }
 }

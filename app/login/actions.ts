@@ -52,34 +52,35 @@ export async function loginAction(_: unknown, formData: FormData) {
 
   const auth = await createAuthClient()
 
-  if (adminUser.admin_password_hash) {
-    // Verify against the admin-specific password
-    const valid = await bcrypt.compare(password, adminUser.admin_password_hash)
-    if (!valid) {
-      await recordFailure()
-      return { error: 'Invalid email or password.' }
-    }
-
-    // Create a session via magic link token (doesn't touch auth.users password)
-    const { data: linkData, error: linkError } = await service.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-    })
-    if (linkError) return { error: 'Failed to create session.' }
-
-    const { error: otpError } = await auth.auth.verifyOtp({
-      token_hash: linkData.properties.hashed_token,
-      type: 'magiclink',
-    })
-    if (otpError) return { error: 'Failed to create session.' }
-  } else {
-    // No admin password set yet — fall back to Supabase auth
-    const { error: signInError } = await auth.auth.signInWithPassword({ email, password })
-    if (signInError) {
-      await recordFailure()
-      return { error: 'Invalid email or password.' }
-    }
+  // The admin password lives ONLY in admin_users.admin_password_hash. There is
+  // deliberately no fallback to auth.signInWithPassword() here: that authenticates
+  // against auth.users, the same credential store the mobile app uses, which meant
+  // an admin who was also an app user could unlock the admin panel with their app
+  // password — and rotating one silently changed the other. An admin with no hash
+  // cannot sign in at all until a Super Admin sets one on Settings > Admin Users.
+  if (!adminUser.admin_password_hash) {
+    return { error: 'No admin password is set for this account. Ask a Super Admin to set one.' }
   }
+
+  const valid = await bcrypt.compare(password, adminUser.admin_password_hash)
+  if (!valid) {
+    await recordFailure()
+    return { error: 'Invalid email or password.' }
+  }
+
+  // Session comes from a magic-link token, which never reads or writes the
+  // auth.users password — it only mints the Supabase session the RLS policies need.
+  const { data: linkData, error: linkError } = await service.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+  })
+  if (linkError) return { error: 'Failed to create session.' }
+
+  const { error: otpError } = await auth.auth.verifyOtp({
+    token_hash: linkData.properties.hashed_token,
+    type: 'magiclink',
+  })
+  if (otpError) return { error: 'Failed to create session.' }
 
   await recordSuccess()
 

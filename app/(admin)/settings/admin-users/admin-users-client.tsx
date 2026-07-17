@@ -1,8 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Loader2, UserPlus, Shield, Trash2 } from 'lucide-react'
-import { inviteAdminAction, changeAccessLevelAction, toggleActiveAction, deleteAdminAction } from './actions'
+import { Loader2, UserPlus, Shield, Trash2, KeyRound } from 'lucide-react'
+import {
+  inviteAdminAction, changeAccessLevelAction, toggleActiveAction, deleteAdminAction,
+  setAdminPasswordAction,
+} from './actions'
 import { ACCESS_LEVEL_LABELS } from '@/types/admin'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -189,11 +192,108 @@ function AdminUserRow({ row, isSelf }: { row: AdminRow; isSelf: boolean }) {
             >
               {pending ? '…' : row.is_active ? 'Deactivate' : 'Reactivate'}
             </button>
+            <SetPasswordDialog adminId={row.id} adminEmail={row.email} />
             <DeleteAdminDialog adminId={row.id} adminEmail={row.email} />
           </div>
         )}
       </td>
     </tr>
+  )
+}
+
+function SetPasswordDialog({ adminId, adminEmail }: { adminId: string; adminEmail: string }) {
+  const [open, setOpen] = useState(false)
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  function submit() {
+    if (password.length < 8) return setError('Password must be at least 8 characters.')
+    if (password !== confirm) return setError('Passwords do not match.')
+    setError(null)
+    startTransition(async () => {
+      try {
+        await setAdminPasswordAction(adminId, password)
+        setDone(true)
+        setPassword(''); setConfirm('')
+        setTimeout(() => { setOpen(false); setDone(false) }, 1200)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to set password.')
+      }
+    })
+  }
+
+  function reset(v: boolean) {
+    setOpen(v)
+    if (!v) { setPassword(''); setConfirm(''); setError(null); setDone(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={reset}>
+      <DialogTrigger asChild>
+        <button
+          title="Set admin password"
+          className="rounded-md border border-salty-border p-1.5 text-salty-muted transition-colors hover:bg-ember-light hover:text-ember hover:border-ember"
+        >
+          <KeyRound className="h-3.5 w-3.5" />
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Set admin password</DialogTitle>
+          <DialogDescription>
+            Sets the admin-panel password for <strong>{adminEmail}</strong>. This is separate from
+            their Salty app account — it does not change any app password. They can change it later
+            from their own profile page. Share it with them over a trusted channel.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 py-1">
+          <div>
+            <label className={labelCls}>New password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              autoComplete="new-password"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Confirm password</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              placeholder="Re-enter password"
+              autoComplete="new-password"
+              className={inputCls}
+            />
+          </div>
+          {error && (
+            <div className="rounded-lg border border-[#F0C4C4] bg-[#FDEDED] px-3 py-2.5 text-[13px] text-[#BF4A3A]">
+              {error}
+            </div>
+          )}
+          {done && (
+            <div className="rounded-lg border border-[#B8D9C5] bg-[#EAF4EE] px-3 py-2.5 text-[13px] text-[#3E8A5A]">
+              Password set.
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
+          <Button onClick={submit} disabled={pending || done}>
+            {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {pending ? 'Setting…' : 'Set password'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

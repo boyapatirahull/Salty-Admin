@@ -80,10 +80,10 @@ export async function deleteUserAction(userId: string) {
   const { error: authErr } = await db.auth.admin.deleteUser(uid)
   if (authErr) throw new Error(`User row deleted but auth account removal failed: ${authErr.message}`)
 
-  // The Supabase Auth account we just deleted is the same one admin login depends on
-  // (via magic-link OTP or signInWithPassword) — so if this email also had an admin_users
-  // row, that admin can no longer authenticate at all. Remove the row explicitly instead of
-  // leaving a dangling "Active" admin entry that's actually unusable.
+  // Admin login checks its own password hash, but it still mints the session from a
+  // magic-link OTP against the Supabase Auth account we just deleted — so if this email
+  // also had an admin_users row, that admin can no longer authenticate at all. Remove the
+  // row explicitly instead of leaving a dangling "Active" admin entry that's actually unusable.
   if (matchingAdmin) {
     await db.from('admin_users').delete().eq('id', matchingAdmin.id)
     await logAudit(admin.id, 'delete_admin_via_user_deletion', 'admin_user', matchingAdmin.id, {
