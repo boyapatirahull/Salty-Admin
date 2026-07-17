@@ -34,18 +34,20 @@ export function UnfinishedOverlay({
 
   return (
     <div className="relative isolate">
-      <div inert className="select-none opacity-40 blur-[1.5px]">
+      {/* Faded enough to read as unavailable, clear enough to still make out the
+          page behind it — the point is to preview what's coming, not hide it. */}
+      <div inert className="select-none opacity-75 blur-[0.5px]">
         {children}
       </div>
 
       {compact ? (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-cream/50 px-4">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-cream/25 px-4">
           {card}
         </div>
       ) : (
         // inset-0 spans the full content height; the inner sticky keeps the card
         // in view if the faded content behind it is taller than the viewport.
-        <div className="absolute inset-0 z-10 bg-cream/50">
+        <div className="absolute inset-0 z-10 bg-cream/25">
           <div className="sticky top-0 flex justify-center px-6 pt-24">{card}</div>
         </div>
       )}

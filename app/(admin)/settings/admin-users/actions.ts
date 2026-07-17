@@ -25,7 +25,11 @@ export async function inviteAdminAction(email: string, fullName: string, accessL
   const { data: authUser, error: authErr } = await db.auth.admin.createUser({
     email: e,
     email_confirm: true,
-    user_metadata: { full_name: n },
+    user_metadata: {
+      full_name: n,
+      // Migration 008's handle_new_user guard keys on this flag to skip app-user profile creation.
+      created_via: 'admin_invite',
+    },
   })
 
   if (authErr && !authErr.message.toLowerCase().includes('already')) {
