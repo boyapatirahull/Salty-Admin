@@ -93,6 +93,7 @@ export default async function AnalyticsPage() {
     { count: tagCount },
     { count: auditTotal },
     { data: auditWeek },
+    { data: aiQuestions },
     activeUsers,
   ] = await Promise.all([
     db.from('users').select('*', { count: 'exact', head: true }),
@@ -112,6 +113,9 @@ export default async function AnalyticsPage() {
     db.from('ticket_tags').select('*', { count: 'exact', head: true }),
     db.from('admin_audit_log').select('*', { count: 'exact', head: true }),
     db.from('admin_audit_log').select('admin_id').gte('created_at', SEVEN_DAYS_AGO),
+    // Fan Memory AI (ask-memory edge function → saved_ai_questions). Same source
+    // the /ai-usage page reads from — this panel is the top-line summary.
+    db.from('saved_ai_questions').select('id, user_id, created_at'),
     getActiveUserCounts(db),
   ])
 
@@ -201,6 +205,14 @@ export default async function AnalyticsPage() {
   }
 
   const bannedPct = totalUsers ? Math.round((bannedCount ?? 0) / totalUsers * 100) : 0
+
+  // ── Claude AI (Fan Memory) ─────────────────────────────────────────
+  type AiRow = { user_id?: string | null; created_at?: string | null }
+  const aiRows: AiRow[] = (aiQuestions ?? []) as AiRow[]
+  const aiTotal = aiRows.length
+  const aiUsers = new Set(aiRows.map(q => q.user_id).filter((v): v is string => !!v)).size
+  const aiLast7 = aiRows.filter(q => q.created_at && Date.now() - new Date(q.created_at).getTime() <= 7 * 86_400_000).length
+  const aiAvgPerUser = aiUsers > 0 ? (aiTotal / aiUsers).toFixed(1) : '0'
 
   return (
     <div className="p-7 space-y-6">
@@ -336,6 +348,23 @@ export default async function AnalyticsPage() {
           )}
         </Panel>
       </div>
+
+      {/* Claude AI (Fan Memory) */}
+      <Panel title="Claude AI Usage" action={{ label: 'View details', href: '/ai-usage' }}>
+        <div className="grid grid-cols-2 divide-x divide-salty-border lg:grid-cols-4">
+          {[
+            { label: 'Total Questions', value: aiTotal.toLocaleString() },
+            { label: 'Unique Users',    value: aiUsers.toLocaleString() },
+            { label: 'Last 7 Days',     value: aiLast7.toLocaleString() },
+            { label: 'Avg / User',      value: aiAvgPerUser },
+          ].map(s => (
+            <div key={s.label} className="px-5 py-4 text-center">
+              <p className="font-sora text-[26px] font-bold text-salty-text">{s.value}</p>
+              <p className="mt-0.5 text-[12px] text-salty-muted">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
 
       {/* Tiers + Photos + Admin activity */}
       <div className="grid gap-5 lg:grid-cols-3">
