@@ -9,7 +9,7 @@ export default async function FeedbackPage() {
 
   const { data: feedback } = await db
     .from('feedback')
-    .select('id, user_id, category, rating, message, status, created_at')
+    .select('id, user_id, category, rating, message, status, created_at, screenshot_urls')
     .order('created_at', { ascending: false })
     .limit(200)
 

@@ -13,6 +13,7 @@ interface FeedbackRow {
   message: string
   status: string
   created_at: string
+  screenshot_urls?: string[] | null
 }
 
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = {
@@ -51,7 +52,21 @@ export function FeedbackTable({ rows }: { rows: FeedbackRow[] }) {
               <TableCell className="font-medium">{fb.category}</TableCell>
               <TableCell>{'★'.repeat(fb.rating)}<span className="text-muted-foreground">{'☆'.repeat(5 - fb.rating)}</span></TableCell>
               <TableCell className="max-w-xs">
-                <p className="truncate text-sm">{fb.message}</p>
+                <p className="line-clamp-2 text-sm">{fb.message}</p>
+                {fb.screenshot_urls && fb.screenshot_urls.length > 0 && (
+                  <div className="mt-1.5 flex gap-1.5">
+                    {fb.screenshot_urls.map((url, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" title="Open screenshot">
+                        <img
+                          src={url}
+                          alt={`Screenshot ${i + 1}`}
+                          className="h-11 w-11 rounded-md border border-salty-border object-cover transition-opacity hover:opacity-80"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </TableCell>
               <TableCell>
                 <Badge variant={STATUS_VARIANT[fb.status] ?? 'outline'} className="text-xs">

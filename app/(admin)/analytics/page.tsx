@@ -5,6 +5,7 @@ import { CategoryDonutChart } from '@/components/charts/category-donut-chart'
 import { TicketActivityChart } from '@/components/charts/ticket-activity-chart'
 import { NewUsersChart } from '@/components/charts/new-users-chart'
 import { TicketSourceChart } from '@/components/charts/ticket-source-chart'
+import { formatPrice } from '@/lib/format'
 
 function Panel({ title, action, children }: { title: string; action?: { label: string; href: string }; children: React.ReactNode }) {
   return (
@@ -84,6 +85,7 @@ export default async function AnalyticsPage() {
     { data: tickets6m },
     { data: allTickets },
     { data: allImports },
+    { data: pricedTickets },
     { data: newUsersRaw },
     { data: tierRows },
     { count: photoCount },
@@ -102,6 +104,7 @@ export default async function AnalyticsPage() {
     db.from('tickets').select('source, category, imported_at').gte('imported_at', cutoff),
     db.from('tickets').select('category, venue_name, source'),
     db.from('pending_imports').select('status'),
+    db.from('tickets').select('price_paid, price_currency, category').not('price_paid', 'is', null),
     db.from('users').select('created_at').gte('created_at', THIRTY_DAYS_AGO.toISOString()),
     db.from('users').select('tier'),
     db.from('photos').select('*', { count: 'exact', head: true }),
@@ -151,6 +154,15 @@ export default async function AnalyticsPage() {
   const approvalRate = totalReviewed > 0 ? Math.round(approvedImports / totalReviewed * 100) : 0
   const emailConnectedCount = (gmailConnected ?? 0) + (imapConnected ?? 0)
   const emailRate = totalUsers ? Math.round(emailConnectedCount / totalUsers * 100) : 0
+
+  // ── Spend (tickets with a recorded price) ────────────────────────────
+  const pricedRows = (pricedTickets ?? []).filter(t => typeof t.price_paid === 'number')
+  const totalSpend = pricedRows.reduce((s, t) => s + Number(t.price_paid), 0)
+  const avgPrice = pricedRows.length > 0 ? totalSpend / pricedRows.length : 0
+  const spendCurrency = pricedRows[0]?.price_currency ?? 'USD'
+  const spendByCat: Record<string, number> = {}
+  for (const t of pricedRows) spendByCat[t.category] = (spendByCat[t.category] ?? 0) + Number(t.price_paid)
+  const topSpendCats = Object.entries(spendByCat).sort((a, b) => b[1] - a[1]).slice(0, 6)
 
   // ── New users per day (last 30 days) ─────────────────────────────────
   const dayMap: Record<string, number> = {}
@@ -292,6 +304,36 @@ export default async function AnalyticsPage() {
           <StatRow label="Import Approval Rate" value={`${approvalRate}%`} sub={`${approvedImports} approved / ${rejectedImports} rejected`} />
           <StatRow label="Avg Friends per User" value={avgFriends} sub={`${accepted} accepted · ${pendingFriends} pending`} />
           <StatRow label="Banned Users" value={`${bannedPct}%`} sub={`${bannedCount ?? 0} of ${totalUsers} users`} />
+        </Panel>
+      </div>
+
+      {/* Spend */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Panel title="Ticket Spend" action={{ label: 'View tickets', href: '/tickets' }}>
+          <StatRow label="Total Recorded Spend" value={formatPrice(totalSpend, spendCurrency)} sub={`${pricedRows.length} ticket${pricedRows.length !== 1 ? 's' : ''} with a price`} />
+          <StatRow label="Average Ticket Price" value={formatPrice(avgPrice, spendCurrency)} />
+          <StatRow label="Tickets Missing Price" value={((totalTickets ?? 0) - pricedRows.length).toLocaleString()} sub={totalTickets ? `${Math.round((1 - pricedRows.length / totalTickets) * 100)}% of tickets` : undefined} />
+        </Panel>
+
+        <Panel title="Spend by Category">
+          {topSpendCats.length === 0 ? (
+            <p className="px-5 py-6 text-[13px] text-salty-muted">No priced tickets yet</p>
+          ) : (
+            topSpendCats.map(([cat, amount]) => {
+              const pct = totalSpend > 0 ? Math.round(amount / totalSpend * 100) : 0
+              return (
+                <div key={cat} className="flex items-center gap-3 border-b border-salty-border px-5 py-3 last:border-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium capitalize text-salty-text">{cat}</p>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-stone">
+                      <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <span className="font-sora text-[14px] font-bold text-salty-text shrink-0">{formatPrice(amount, spendCurrency)}</span>
+                </div>
+              )
+            })
+          )}
         </Panel>
       </div>
 

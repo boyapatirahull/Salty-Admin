@@ -3,11 +3,13 @@ import { notFound } from 'next/navigation'
 import { requireAdmin, logAudit } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { maskEmail } from '@/lib/privacy'
+import { formatPrice } from '@/lib/format'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DeleteUserButton } from './delete-user-button'
 import { SendNotificationDialog } from './send-notification-dialog'
+import { SendEmailDialog } from './send-email-dialog'
 import { ResetPasswordButton } from './reset-password-button'
 import { ForceSignOutButton } from './force-signout-button'
 import { TierSelect } from './tier-select'
@@ -72,6 +74,8 @@ export default async function UserDetailPage({ params }: PageProps) {
   const canManageAuth = (admin?.access_level ?? 5) <= 2
   const canBan = (admin?.access_level ?? 5) <= 2
   const showFullPii = (admin?.access_level ?? 5) <= 2
+  // Emailing users is unfinished — non-Super-Admins get the dialog veiled.
+  const emailLocked = (admin?.access_level ?? 5) !== 1
 
   const isBanned = user.banned_until !== null && new Date(user.banned_until) > new Date()
   const isPermBan = isBanned && user.banned_until && new Date(user.banned_until).getFullYear() >= 2099
@@ -155,6 +159,7 @@ export default async function UserDetailPage({ params }: PageProps) {
       {(canNotify || canDelete || canManageAuth) && (
         <div className="flex gap-2 flex-wrap">
           {canNotify && <SendNotificationDialog userId={id} />}
+          {canManageAuth && <SendEmailDialog userId={id} userEmail={displayEmail} locked={emailLocked} />}
           {canManageAuth && <ResetPasswordButton userId={id} userEmail={user.email} />}
           {canManageAuth && <ForceSignOutButton userId={id} userEmail={user.email} />}
           {canBan && <BanUserDialog userId={id} userEmail={user.email} bannedUntil={user.banned_until ?? null} />}
@@ -177,12 +182,12 @@ export default async function UserDetailPage({ params }: PageProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {['Title','Category','Date','Source','Status'].map(h => <TableHead key={h}>{h}</TableHead>)}
+                  {['Title','Category','Date','Source','Price','Status'].map(h => <TableHead key={h}>{h}</TableHead>)}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(tickets ?? []).length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center text-salty-muted py-6">No tickets</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center text-salty-muted py-6">No tickets</TableCell></TableRow>
                 ) : (
                   (tickets ?? []).map(t => (
                     <TableRow key={t.id}>
@@ -190,6 +195,7 @@ export default async function UserDetailPage({ params }: PageProps) {
                       <TableCell><Badge variant="secondary" className="text-xs capitalize">{t.category}</Badge></TableCell>
                       <TableCell className="text-salty-muted text-sm">{t.date_str ?? '—'}</TableCell>
                       <TableCell className="text-salty-muted text-sm capitalize">{t.source}</TableCell>
+                      <TableCell className="text-sm font-medium">{formatPrice(t.price_paid, t.price_currency)}</TableCell>
                       <TableCell><Badge variant="outline" className="text-xs capitalize">{t.status}</Badge></TableCell>
                     </TableRow>
                   ))

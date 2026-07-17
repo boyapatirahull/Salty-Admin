@@ -7,6 +7,7 @@ import { Pencil, Trash2, Check, X, Loader2, ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { editTicketAction, deleteTicketAction } from './actions'
 import { useAccessLevel } from '@/components/admin-provider'
+import { formatPrice } from '@/lib/format'
 
 const CATEGORIES = ['concert','sports','theater','dining','festival','trip','other']
 const SOURCES    = ['gmail','calendar','wallet','manual','photo']
@@ -24,6 +25,8 @@ interface Ticket {
   source: string
   status: string
   confidence: number
+  price_paid: number | null
+  price_currency: string | null
   imported_at: string
 }
 
@@ -120,6 +123,7 @@ function TicketRow({ ticket, canEdit, canDelete }: { ticket: Ticket; canEdit: bo
           </select>
         </td>
         <td className="px-4 py-2 text-[12px] text-salty-secondary">{ticket.source}</td>
+        <td className="px-4 py-2 text-[12px] text-salty-secondary">{formatPrice(ticket.price_paid, ticket.price_currency)}</td>
         <td className="px-4 py-2 text-[12px] text-salty-secondary">{ticket.user_email}</td>
         <td className="px-4 py-2">
           <div className="flex gap-1">
@@ -138,7 +142,7 @@ function TicketRow({ ticket, canEdit, canDelete }: { ticket: Ticket; canEdit: bo
   if (deleting) {
     return (
       <tr className="border-b border-salty-border bg-[#FDEDED]/40">
-        <td colSpan={7} className="px-4 py-3">
+        <td colSpan={8} className="px-4 py-3">
           <div className="flex items-center gap-3">
             <span className="text-[13px] text-[#BF4A3A]">Delete <strong>{ticket.title ?? 'this ticket'}</strong>? This cannot be undone.</span>
             <button onClick={confirmDelete} disabled={pending} className="flex items-center gap-1 rounded-md bg-[#FDEDED] px-2.5 py-1 text-[11px] font-semibold text-[#BF4A3A] border border-[#F0C4C4] hover:bg-[#F5D0D0]">
@@ -170,6 +174,7 @@ function TicketRow({ ticket, canEdit, canDelete }: { ticket: Ticket; canEdit: bo
           {ticket.source}
         </span>
       </td>
+      <td className="px-4 py-3 text-[12px] font-medium text-salty-text whitespace-nowrap">{formatPrice(ticket.price_paid, ticket.price_currency)}</td>
       <td className="px-4 py-3 text-[12px] text-salty-secondary">
         <Link href={`/users/${ticket.user_id}`} className="flex items-center gap-1 hover:text-ember hover:underline">
           <span className="truncate max-w-[140px]">{ticket.user_email}</span>
@@ -207,14 +212,14 @@ export function TicketsClient({ tickets, filters }: { tickets: Ticket[]; filters
           <table className="w-full">
             <thead>
               <tr className="border-b border-salty-border bg-cream">
-                {['Title','Venue','Date','Category','Source','User',''].map(h => (
+                {['Title','Venue','Date','Category','Source','Price','User',''].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-salty-muted">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {tickets.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-[13px] text-salty-muted">No tickets found</td></tr>
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-[13px] text-salty-muted">No tickets found</td></tr>
               ) : (
                 tickets.map(t => <TicketRow key={t.id} ticket={t} canEdit={canEdit} canDelete={canDelete} />)
               )}

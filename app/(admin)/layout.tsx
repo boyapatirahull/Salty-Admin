@@ -6,8 +6,14 @@ import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import type { AdminUser } from '@/types/admin'
 
-async function getLayoutCounts() {
+async function getLayoutCounts(accessLevel: number) {
   const db = createServiceClient()
+
+  // Support Chat is Super-Admin-only while it's unfinished. Skip its unread
+  // lookup for everyone else so the nav badge can't advertise live activity on
+  // a page they only ever see the placeholder for.
+  const includeSupport = accessLevel === 1
+
   const [
     { count: users },
     { count: tickets },
@@ -19,7 +25,9 @@ async function getLayoutCounts() {
     db.from('tickets').select('*', { count: 'exact', head: true }),
     db.from('pending_imports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     db.from('feedback').select('*', { count: 'exact', head: true }).eq('status', 'unread'),
-    db.from('support_conversations').select('id').eq('status', 'open'),
+    includeSupport
+      ? db.from('support_conversations').select('id').eq('status', 'open')
+      : Promise.resolve({ data: [] as { id: string }[] }),
   ])
 
   const openIds = (openConvos ?? []).map((c) => c.id)
@@ -47,7 +55,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const admin = await getAdminUser()
   if (!admin) redirect('/login?error=unauthorized')
 
-  const counts = await getLayoutCounts()
+  const counts = await getLayoutCounts(admin.access_level)
 
   return (
     <AdminProvider admin={admin as AdminUser}>

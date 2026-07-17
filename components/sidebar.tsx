@@ -6,6 +6,7 @@ import {
   LayoutDashboard, BarChart3, Users, Ticket, Mail,
   Calendar, Database, Send, Bell, Settings,
   ChevronRight, LogOut, Wifi, Activity, ShieldAlert, MessageSquare,
+  MailPlus, Sparkles, ScanLine, Music, Heart, Compass,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAdmin } from './admin-provider'
@@ -50,10 +51,21 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/tickets',         label: 'Tickets',         icon: Ticket,   maxLevel: 3, countVariant: 'gold' },
       { href: '/pending-imports',   label: 'Imports',          icon: Mail,     maxLevel: 2, countVariant: 'ember' },
       { href: '/gmail-connections', label: 'Email Connections', icon: Wifi,   maxLevel: 2 },
+      { href: '/photo-scans',       label: 'Photo Scans',      icon: ScanLine, maxLevel: 3 },
+      { href: '/enrichment',        label: 'Enrichment',       icon: Music,    maxLevel: 3 },
       { href: '/moderation',        label: 'Moderation',       icon: ShieldAlert, maxLevel: 3 },
       { href: '/feedback',          label: 'Feedback',         icon: Calendar, maxLevel: 3 },
       { href: '/notifications',     label: 'Notifications',    icon: Bell,     maxLevel: 3 },
-      //{ href: '/support-chat',      label: 'Support Chat',     icon: MessageSquare, maxLevel: 3, countVariant: 'ember' },
+      { href: '/support-chat',      label: 'Support Chat',     icon: MessageSquare, maxLevel: 3, countVariant: 'ember' },
+    ],
+  },
+  {
+    label: 'Engagement',
+    items: [
+      { href: '/email',     label: 'Email Users', icon: MailPlus,      maxLevel: 2 },
+      { href: '/ai-usage',  label: 'AI Usage',    icon: Sparkles,      maxLevel: 3 },
+      { href: '/social',    label: 'Social',      icon: Heart,         maxLevel: 3 },
+      { href: '/discovery', label: 'Discovery',   icon: Compass,       maxLevel: 3 },
     ],
   },
   {

@@ -2,11 +2,19 @@ import { requireAdmin } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { maskEmail } from '@/lib/privacy'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { UnfinishedOverlay } from '@/components/unfinished-overlay'
 import { ConversationTable, type ConversationRow } from './conversation-table'
 import { RealtimeRefresher } from './realtime-refresher'
 
 export default async function SupportChatPage() {
   const admin = await requireAdmin(3)
+
+  // The mobile side of Support Chat isn't built yet, so it stays Super-Admin-only
+  // until it is. Everyone else sees the inbox behind a "not ready" veil.
+  // sendReply/closeConversation enforce level 1 — that is the real gate; this is
+  // only the display half of it.
+  const locked = admin.access_level !== 1
+
   const db = createServiceClient()
   const showFullPii = admin.access_level <= 2
 
@@ -61,9 +69,10 @@ export default async function SupportChatPage() {
   const closed = rows.filter((r) => r.status === 'closed')
   const unreadCount = rows.filter((r) => r.unread).length
 
-  return (
+  const content = (
     <div className="p-7 space-y-5">
-      <RealtimeRefresher />
+      {/* No point holding a realtime subscription open for a veiled page. */}
+      {!locked && <RealtimeRefresher />}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-sora text-[20px] font-bold text-salty-text">Support Chat</h1>
@@ -90,4 +99,6 @@ export default async function SupportChatPage() {
       </Tabs>
     </div>
   )
+
+  return locked ? <UnfinishedOverlay>{content}</UnfinishedOverlay> : content
 }

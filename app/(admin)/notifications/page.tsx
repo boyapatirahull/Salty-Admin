@@ -2,6 +2,15 @@ import { requireAdmin } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase/server'
 import { NotifComposer } from './notif-composer'
 
+const PREF_TOGGLES: [string, string][] = [
+  ['event_reminders', 'Event reminders'],
+  ['friend_activity', 'Friend activity'],
+  ['new_detections', 'New detections'],
+  ['setlist_available', 'Setlist available'],
+  ['photos_added', 'Photos added'],
+  ['artist_alerts', 'Artist alerts'],
+]
+
 export default async function NotificationsPage() {
   await requireAdmin(3)
   const db = createServiceClient()
@@ -9,13 +18,34 @@ export default async function NotificationsPage() {
   const [
     { data: users },
     { data: log },
+    { count: totalUsers },
+    { data: tokens },
+    { data: prefs },
   ] = await Promise.all([
     db.from('users').select('id, email').order('email').limit(500),
     db.from('notifications')
       .select('id, user_id, title, body, read, created_at')
       .order('created_at', { ascending: false })
       .limit(50),
+    db.from('users').select('*', { count: 'exact', head: true }),
+    db.from('notification_tokens').select('user_id, platform'),
+    db.from('notification_preferences').select('*'),
   ])
+
+  // ── Push reach ──
+  const tokenRows = tokens ?? []
+  const iosTokens = tokenRows.filter(t => t.platform === 'ios').length
+  const androidTokens = tokenRows.filter(t => t.platform === 'android').length
+  const usersWithToken = new Set(tokenRows.map(t => t.user_id).filter(Boolean)).size
+  const reachPct = totalUsers ? Math.round(usersWithToken / totalUsers * 100) : 0
+
+  // ── Opt-in rates ──
+  const prefRows = (prefs ?? []) as Record<string, unknown>[]
+  const optInRates = PREF_TOGGLES.map(([key, label]) => {
+    const on = prefRows.filter(p => p[key] === true).length
+    const pct = prefRows.length ? Math.round(on / prefRows.length * 100) : 0
+    return { key, label, on, pct }
+  })
 
   // Resolve user emails for the log
   const logUserIds = [...new Set((log ?? []).map(n => n.user_id).filter(Boolean))]
@@ -33,6 +63,42 @@ export default async function NotificationsPage() {
       </div>
 
       <NotifComposer users={users ?? []} />
+
+      {/* Delivery insight */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-[14px] border border-salty-border bg-warm-white">
+          <div className="border-b border-salty-border px-5 py-4">
+            <h2 className="font-sora text-[14px] font-bold text-salty-text">Push Reach</h2>
+          </div>
+          <div className="flex items-center justify-between border-b border-salty-border px-5 py-3">
+            <div><p className="text-[13px] text-salty-secondary">Users reachable</p><p className="text-[11px] text-salty-muted">{usersWithToken} of {totalUsers ?? 0} have a push token</p></div>
+            <span className="font-sora text-[17px] font-bold text-salty-text">{reachPct}%</span>
+          </div>
+          <div className="flex items-center justify-between border-b border-salty-border px-5 py-3">
+            <span className="text-[13px] text-salty-secondary">iOS tokens</span><span className="font-sora text-[15px] font-bold text-salty-text">{iosTokens}</span>
+          </div>
+          <div className="flex items-center justify-between px-5 py-3">
+            <span className="text-[13px] text-salty-secondary">Android tokens</span><span className="font-sora text-[15px] font-bold text-salty-text">{androidTokens}</span>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-[14px] border border-salty-border bg-warm-white">
+          <div className="border-b border-salty-border px-5 py-4">
+            <h2 className="font-sora text-[14px] font-bold text-salty-text">Notification Opt-in Rates</h2>
+          </div>
+          {optInRates.map(r => (
+            <div key={r.key} className="flex items-center gap-3 border-b border-salty-border px-5 py-2.5 last:border-0">
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] text-salty-text">{r.label}</p>
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-stone">
+                  <div className="h-full rounded-full bg-ember" style={{ width: `${r.pct}%` }} />
+                </div>
+              </div>
+              <span className="font-sora text-[13px] font-bold text-salty-text shrink-0 w-20 text-right">{r.pct}% <span className="font-sans font-normal text-[11px] text-salty-muted">({r.on})</span></span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Log */}
       <div>

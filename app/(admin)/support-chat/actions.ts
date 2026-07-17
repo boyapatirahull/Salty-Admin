@@ -18,7 +18,9 @@ async function callNotifFn(userId: string, title: string, body: string) {
 }
 
 export async function sendReplyAction(conversationId: string, message: string) {
-  const admin = await requireAdmin(3)
+  // Super-Admin-only while Support Chat is unfinished — must match the page gate,
+  // otherwise hiding the UI does nothing: server actions are callable endpoints.
+  const admin = await requireAdmin(1)
   const cid   = assertUUID(conversationId, 'Conversation ID')
   const msg   = assertString(message, 'Message', 2000)
   const db    = createServiceClient()
@@ -50,7 +52,7 @@ export async function sendReplyAction(conversationId: string, message: string) {
 }
 
 export async function closeConversationAction(conversationId: string) {
-  const admin = await requireAdmin(3)
+  const admin = await requireAdmin(1)
   const cid   = assertUUID(conversationId, 'Conversation ID')
   const db    = createServiceClient()
 

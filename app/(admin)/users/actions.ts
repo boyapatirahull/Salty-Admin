@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin, logAudit } from '@/lib/auth'
 import { createAuthClient, createServiceClient } from '@/lib/supabase/server'
 import { assertUUID, assertString, assertEnum } from '@/lib/validate'
+import { sendEmail } from '@/lib/email'
 
 const VALID_TIERS = ['free', 'premium', 'family'] as const
 
@@ -118,6 +119,25 @@ export async function sendNotificationAction(userId: string, title: string, body
   if (!res.ok) throw new Error('Failed to send notification.')
 
   await logAudit(admin.id, 'send_notification', 'user', uid, { title: t })
+  return { ok: true }
+}
+
+export async function sendUserEmailAction(userId: string, subject: string, body: string) {
+  // Super-Admin-only while the email feature is unfinished — matches the Email
+  // Users page and the veiled dialog on the profile. Server actions are callable
+  // endpoints, so this is what actually prevents a send, not the dialog's veil.
+  const admin = await requireAdmin(1)
+  const uid   = assertUUID(userId, 'User ID')
+  const s     = assertString(subject, 'Subject', 200)
+  const b     = assertString(body, 'Body', 20_000)
+
+  const db = createServiceClient()
+  const { data: user } = await db.from('users').select('id, email, banned_until').eq('id', uid).single()
+  if (!user) throw new Error('User not found.')
+  if (!user.email) throw new Error('This user has no email address.')
+
+  await sendEmail(user.email, s, b)
+  await logAudit(admin.id, 'send_user_email', 'user', uid, { subject: s })
   return { ok: true }
 }
 

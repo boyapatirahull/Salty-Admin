@@ -20,7 +20,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   // Build query
   let query = db
     .from('tickets')
-    .select('id, user_id, title, venue_name, date_str, time_str, category, source, status, confidence, imported_at', { count: 'exact' })
+    .select('id, user_id, title, venue_name, date_str, time_str, category, source, status, confidence, price_paid, price_currency, imported_at', { count: 'exact' })
     .order('imported_at', { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1)
 
